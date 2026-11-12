@@ -26,15 +26,26 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip \
+          sudo apt-get install -y git zip unzip \
             autoconf libtool pkg-config \
             zlib1g-dev libffi-dev libssl-dev \
-            build-essential cmake \
-            libncurses5 libncursesw5
+            build-essential cmake
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;37.0.0"
 
       - name: Install Buildozer
         run: |
@@ -43,6 +54,8 @@ jobs:
 
       - name: Build Android APK
         run: |
+          export ANDROIDSDK="$ANDROID_HOME"
+          export ANDROIDNDK="$ANDROID_HOME/ndk/27.3.13750724"
           buildozer -v android debug
 
       - name: Upload APK
