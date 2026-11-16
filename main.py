@@ -5,14 +5,18 @@ from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.metrics import dp
 
+from indicators import analyze_buy_signal
+
+
 class CryptoBotApp(App):
     def build(self):
         self.title = "CRYPTO BOT PRO"
+        self.minimum_buy_score = 80
 
         layout = BoxLayout(
             orientation="vertical",
             padding=dp(18),
-            spacing=dp(12)
+            spacing=dp(10)
         )
 
         layout.add_widget(Label(
@@ -24,68 +28,81 @@ class CryptoBotApp(App):
         ))
 
         layout.add_widget(Label(
-            text="DEMO MODE",
-            color=(0, 0.8, 0.3, 1),
-            font_size="18sp"
+            text="SPOT TRADING | BUY CONFIRMATION FILTER",
+            font_size="15sp"
         ))
 
-        layout.add_widget(Label(
-            text="Wallet Balance: 100 USDT\n"
-                 "Invested: 0 USDT\n"
-                 "Available: 100 USDT\n"
-                 "Open Trades: 0",
-            font_size="18sp"
-        ))
-
-        layout.add_widget(Label(
-            text="BTC DAILY FILTER: WAIT",
-            font_size="18sp"
-        ))
-
-        self.signal = Label(
-            text="TRADING SIGNAL: WAIT",
-            font_size="23sp",
-            color=(1, 0.7, 0, 1)
+        self.score_label = Label(
+            text="BUY CONFIDENCE: WAITING FOR LIVE MARKET DATA",
+            font_size="17sp"
         )
-        layout.add_widget(self.signal)
+        layout.add_widget(self.score_label)
 
-        buy = Button(text="BUY", background_color=(0, 0.6, 0.2, 1))
-        buy.bind(on_release=lambda x: self.confirm("BUY"))
-        layout.add_widget(buy)
+        self.filter_label = Label(
+            text="MINIMUM BUY SCORE: 80%",
+            font_size="16sp"
+        )
+        layout.add_widget(self.filter_label)
 
-        sell = Button(text="SELL", background_color=(0.8, 0.1, 0.1, 1))
-        sell.bind(on_release=lambda x: self.confirm("SELL"))
-        layout.add_widget(sell)
+        filter_button = Button(
+            text="CHANGE FILTER: 80% / 100%",
+            size_hint_y=None,
+            height=dp(48)
+        )
+        filter_button.bind(on_release=lambda *_: self.toggle_filter())
+        layout.add_widget(filter_button)
 
-        wait = Button(text="WAIT")
-        wait.bind(on_release=lambda x: self.set_wait())
-        layout.add_widget(wait)
+        self.checks_label = Label(
+            text=(
+                "5 CONFIRMATIONS (20% EACH)\n"
+                "1. EMA 20 above EMA 50\n"
+                "2. Price above EMA 20\n"
+                "3. RSI between 50 and 68\n"
+                "4. MACD above signal\n"
+                "5. Volume at least 1.2x average"
+            ),
+            font_size="14sp",
+            halign="left",
+            valign="middle"
+        )
+        self.checks_label.bind(
+            size=lambda instance, value: setattr(instance, "text_size", value)
+        )
+        layout.add_widget(self.checks_label)
 
         layout.add_widget(Label(
-            text="No real orders. Demo screen only.",
+            text="BUY is allowed only at/above the selected score.",
             font_size="13sp"
+        ))
+
+        layout.add_widget(Label(
+            text=(
+                "Safety: score is indicator confluence, not a win probability. "
+                "No live order is placed by this screen."
+            ),
+            font_size="12sp"
         ))
 
         return layout
 
-    def confirm(self, action):
-        content = BoxLayout(orientation="vertical", padding=dp(12))
-        content.add_widget(Label(
-            text=f"{action} signal selected.\n"
-                 "This is only a demo.\n"
-                 "No Binance order will be placed."
-        ))
-        close = Button(text="OK", size_hint_y=None, height=dp(45))
-        content.add_widget(close)
-        popup = Popup(
-            title="Confirmation",
-            content=content,
-            size_hint=(0.85, 0.4)
+    def toggle_filter(self):
+        self.minimum_buy_score = 100 if self.minimum_buy_score == 80 else 80
+        self.filter_label.text = (
+            "MINIMUM BUY SCORE: {}%".format(self.minimum_buy_score)
         )
-        close.bind(on_release=popup.dismiss)
-        popup.open()
 
-    def set_wait(self):
-        self.signal.text = "TRADING SIGNAL: WAIT"
+    def analyze_market_candles(self, candles):
+        """Call this with fresh OHLCV candles from the live market feed."""
+        result = analyze_buy_signal(candles, self.minimum_buy_score)
+        self.score_label.text = "BUY CONFIDENCE: {}% | {}".format(
+            result["score"], result["decision"]
+        )
+        lines = ["{}: {}".format(
+            "PASS" if passed else "NO",
+            name
+        ) for name, passed in result["checks"].items()]
+        self.checks_label.text = "\n".join(lines) if lines else result["reason"]
+        return result
+
 
 CryptoBotApp().run()
