@@ -1,5 +1,7 @@
 """CRYPTO BOT PRO - Binance Spot live dashboard; public data only, no order execution."""
 import json
+import ssl
+import certifi
 import threading
 import urllib.parse
 import urllib.request
@@ -15,12 +17,14 @@ from indicators import analyze_buy_signal
 from pump_scanner import scan_binance_spot
 
 BASE = "https://api.binance.com"
+# Use the maintained Mozilla CA bundle on Android; never disable TLS verification.
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 PAIRS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","AVAXUSDT","LINKUSDT","DOTUSDT","SUIUSDT","LTCUSDT","BCHUSDT","TONUSDT","PEPEUSDT","SHIBUSDT","WIFUSDT","BONKUSDT","FLOKIUSDT","NEARUSDT","APTUSDT","OPUSDT","ARBUSDT","INJUSDT","SEIUSDT","TIAUSDT","ATOMUSDT","UNIUSDT","AAVEUSDT"]
 
 def api(path, params=None):
     query = urllib.parse.urlencode(params or {})
     req = urllib.request.Request(BASE + path + (("?" + query) if query else ""), headers={"User-Agent":"CryptoBotPro/2.0"})
-    with urllib.request.urlopen(req, timeout=12) as response:
+    with urllib.request.urlopen(req, timeout=12, context=SSL_CONTEXT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 def market_data(symbol):
