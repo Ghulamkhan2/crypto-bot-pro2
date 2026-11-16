@@ -4,11 +4,15 @@ Alerts identify unusual pre-breakout activity; they do not predict or guarantee
 a 2x/3x/4x move. Public market data only; this module never places orders.
 """
 import json
+import ssl
+import certifi
 import time
 import urllib.parse
 import urllib.request
 
 BASE = "https://api.binance.com"
+# Use the maintained Mozilla CA bundle on Android; never disable TLS verification.
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 MIN_QUOTE_VOLUME = 100000.0
 MAX_MARKETS = 25
 ALERT_SCORE = 60
@@ -20,7 +24,7 @@ def _get_json(path, params=None, timeout=8):
     request = urllib.request.Request(
         url, headers={"User-Agent": "CryptoBotPro/1.0"}
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
