@@ -64,11 +64,11 @@ class CryptoBotApp(App):
 
         self.checks_label = Label(
             text=(
-                "BUY CONFIRMATIONS (20% EACH)\\n"
-                "1. EMA20 above EMA50\\n"
-                "2. Price above EMA20\\n"
-                "3. RSI between 50 and 68\\n"
-                "4. MACD above signal\\n"
+                "BUY CONFIRMATIONS (20% EACH)\n"
+                "1. EMA20 above EMA50\n"
+                "2. Price above EMA20\n"
+                "3. RSI between 50 and 68\n"
+                "4. MACD above signal\n"
                 "5. Volume at least 1.2x average"
             ),
             font_size="13sp",
@@ -108,7 +108,7 @@ class CryptoBotApp(App):
 
         self.scan_results = Label(
             text=(
-                "Waiting for scan...\\n"
+                "Waiting for scan...\n"
                 "Checks: volume surge, 5m price momentum, aggressive buying, "
                 "and candle close near high."
             ),
@@ -147,7 +147,7 @@ class CryptoBotApp(App):
         )
         lines = ["{}: {}".format("PASS" if passed else "NO", name)
                  for name, passed in result["checks"].items()]
-        self.checks_label.text = "\\n".join(lines) if lines else result["reason"]
+        self.checks_label.text = "\n".join(lines) if lines else result["reason"]
         return result
 
     def start_pump_scan(self):
@@ -171,7 +171,7 @@ class CryptoBotApp(App):
         self.scan_running = False
         self.scan_status.text = "Scanner could not get market data."
         self.scan_results.text = (
-            "Error: {}\\nCheck internet access or try again later.".format(message[:180])
+            "Error: {}\nCheck internet access or try again later.".format(message[:180])
         )
 
     def _show_scan_results(self, results):
@@ -192,7 +192,7 @@ class CryptoBotApp(App):
             score = item.get("score", 0)
             marker = "🚨 ALERT" if item.get("alert") else "WAIT"
             lines.append(
-                "{} | {} | {}%\\n"
+                "{} | {} | {}%\n"
                 "Vol: {}x | 5m: {}% | Buy: {}%".format(
                     symbol, marker, score,
                     item.get("volume_ratio", 0),
@@ -200,7 +200,7 @@ class CryptoBotApp(App):
                     item.get("buy_ratio", 0)
                 )
             )
-        self.scan_results.text = "\\n\\n".join(lines)
+        self.scan_results.text = "\n\n".join(lines)
 
 
 CryptoBotApp().run()
