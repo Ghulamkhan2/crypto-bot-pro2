@@ -9,7 +9,7 @@ version = 1.0
 
 # The app uses urllib for Binance public data. Kivy's optional UrlRequest
 # dependencies are not needed and can trigger incompatible Android wheels.
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy,certifi
 
 orientation = portrait
 fullscreen = 0
