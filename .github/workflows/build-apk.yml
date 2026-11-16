@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -34,18 +37,14 @@ jobs:
             zlib1g-dev libffi-dev libssl-dev \
             build-essential cmake
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses and install packages
         run: |
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found"
-            exit 1
-          fi
-          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
+          set -e
+          yes | sdkmanager --licenses
+          sdkmanager --install \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;37.0.0"
+            "build-tools;35.0.0"
 
       - name: Install Buildozer
         run: |
