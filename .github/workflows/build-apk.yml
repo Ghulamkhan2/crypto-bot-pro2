@@ -65,6 +65,13 @@ jobs:
           test -x "$SDK/build-tools/33.0.2/aapt"
           echo "Android SDK configured: $SDK"
 
+          # Buildozer 1.6 still checks the legacy tools/bin/sdkmanager path.
+          # Map that legacy path to the installed cmdline-tools directory.
+          CMDLINE_TOOLS_DIR="$(dirname "$(dirname "$SDKMANAGER")")"
+          ln -sfn "$CMDLINE_TOOLS_DIR" "$SDK/tools"
+          test -x "$SDK/tools/bin/sdkmanager"
+          echo "Legacy sdkmanager path configured: $SDK/tools/bin/sdkmanager"
+
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
