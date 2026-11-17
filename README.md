@@ -41,3 +41,8 @@ A BUY score is an indicator confluence score, not a probability or profit guaran
 ## Network and security
 
 The app uses Binance public Spot endpoints over HTTPS and verifies TLS certificates with the Mozilla CA bundle supplied by `certifi`. No API secret or private trading permission is required. Never put exchange API keys in source code or a public repository.
+
+
+## Latest build verification
+
+A new push to `main` triggers the Android APK workflow. Download the APK only from a completed successful Actions run; a running build is not a verified APK.
