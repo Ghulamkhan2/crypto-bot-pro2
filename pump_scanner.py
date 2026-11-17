@@ -13,8 +13,8 @@ import urllib.request
 BASE = "https://api.binance.com"
 # Use the maintained Mozilla CA bundle on Android; never disable TLS verification.
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
-MIN_QUOTE_VOLUME = 100000.0
-MAX_MARKETS = 25
+MIN_QUOTE_VOLUME = 50000.0
+MAX_MARKETS = 40
 ALERT_SCORE = 60
 
 
