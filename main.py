@@ -75,6 +75,8 @@ class CryptoBotApp(App):
         body.add_widget(self.info("Binance public market data only. BUY/SELL/WAIT are analysis signals; this app does not place orders."))
         Clock.schedule_once(lambda dt: self.refresh_market(), 0.5)
         Clock.schedule_once(lambda dt: self.load_all_pairs(), 1.0)
+        # Keep the selected market view fresh without requiring manual taps.
+        Clock.schedule_interval(lambda dt: self.refresh_market(), 60)
         return root
 
 
