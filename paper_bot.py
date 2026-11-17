@@ -2,6 +2,8 @@
 import json
 import os
 import urllib.request
+import ssl
+import certifi
 from datetime import datetime, timezone
 
 COINS = ["ETHUSDT", "BNBUSDT", "SOLUSDT", "LINKUSDT", "TRXUSDT"]
@@ -11,13 +13,14 @@ MAX_POSITIONS = 2
 STOP_LOSS = 0.03
 TAKE_PROFIT = 0.05
 FILE = "demo_positions.json"
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 def api_data(url):
     req = urllib.request.Request(
         url, headers={"User-Agent": "Mozilla/5.0"}
     )
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r:
         return json.loads(r.read().decode())
 
 
