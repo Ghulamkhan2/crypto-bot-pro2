@@ -16,16 +16,22 @@ from kivy.uix.scrollview import ScrollView
 from indicators import analyze_buy_signal
 from pump_scanner import scan_binance_spot
 
-BASE = "https://api.binance.com"
+BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
 # Use the maintained Mozilla CA bundle on Android; never disable TLS verification.
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 PAIRS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT","AVAXUSDT","LINKUSDT","DOTUSDT","SUIUSDT","LTCUSDT","BCHUSDT","TONUSDT","PEPEUSDT","SHIBUSDT","WIFUSDT","BONKUSDT","FLOKIUSDT","NEARUSDT","APTUSDT","OPUSDT","ARBUSDT","INJUSDT","SEIUSDT","TIAUSDT","ATOMUSDT","UNIUSDT","AAVEUSDT"]
 
 def api(path, params=None):
     query = urllib.parse.urlencode(params or {})
-    req = urllib.request.Request(BASE + path + (("?" + query) if query else ""), headers={"User-Agent":"CryptoBotPro/2.0"})
-    with urllib.request.urlopen(req, timeout=12, context=SSL_CONTEXT) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error = None
+    for base in BASES:
+        req = urllib.request.Request(base + path + (("?" + query) if query else ""), headers={"User-Agent":"CryptoBotPro/2.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=12, context=SSL_CONTEXT) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError("All Binance API hosts failed; check DNS/network. Last error: {}".format(last_error))
 
 def market_data(symbol):
     ticker = api("/api/v3/ticker/24hr", {"symbol":symbol})
