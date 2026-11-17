@@ -10,7 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 
-BASE = "https://api.binance.com"
+BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
 # Use the maintained Mozilla CA bundle on Android; never disable TLS verification.
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 MIN_QUOTE_VOLUME = 50000.0
@@ -20,12 +20,18 @@ ALERT_SCORE = 60
 
 def _get_json(path, params=None, timeout=8):
     query = urllib.parse.urlencode(params or {})
-    url = BASE + path + (("?" + query) if query else "")
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "CryptoBotPro/1.0"}
-    )
-    with urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error = None
+    for base in BASES:
+        url = base + path + (("?" + query) if query else "")
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "CryptoBotPro/1.0"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout, context=SSL_CONTEXT) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError("All Binance API hosts failed; check DNS/network. Last error: {}".format(last_error))
 
 
 def score_early_pump(klines):
