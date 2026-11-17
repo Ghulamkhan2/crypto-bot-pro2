@@ -39,6 +39,7 @@ class CryptoBotApp(App):
         self.minimum_buy_score = 80
         self.busy = False
         self.scan_running = False
+        self.pairs_loading = False
         root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(6))
         root.add_widget(Label(text="[b]CRYPTO BOT PRO[/b]\nBINANCE SPOT LIVE DASHBOARD", markup=True, font_size="21sp", size_hint_y=None, height=dp(62)))
         scroll = ScrollView(do_scroll_x=False)
@@ -50,6 +51,8 @@ class CryptoBotApp(App):
         self.pair = Spinner(text="BTCUSDT", values=tuple(PAIRS), size_hint_y=None, height=dp(48))
         self.pair.bind(text=lambda *_: self.refresh_market())
         body.add_widget(self.pair)
+        self.pair_status = self.info("Loading all Binance Spot USDT trading pairs...")
+        body.add_widget(self.pair_status)
         buttons = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
         refresh = Button(text="REFRESH LIVE DATA")
         refresh.bind(on_release=lambda *_: self.refresh_market())
@@ -71,7 +74,44 @@ class CryptoBotApp(App):
         body.add_widget(self.scan_status); body.add_widget(self.scan_results)
         body.add_widget(self.info("Binance public market data only. BUY/SELL/WAIT are analysis signals; this app does not place orders."))
         Clock.schedule_once(lambda dt: self.refresh_market(), 0.5)
+        Clock.schedule_once(lambda dt: self.load_all_pairs(), 1.0)
         return root
+
+
+    def load_all_pairs(self):
+        if self.pairs_loading:
+            return
+        self.pairs_loading = True
+        threading.Thread(target=self.pairs_worker, daemon=True).start()
+
+    def pairs_worker(self):
+        try:
+            data = api("/api/v3/exchangeInfo")
+            symbols = sorted({
+                item["symbol"] for item in data.get("symbols", [])
+                if item.get("status") == "TRADING"
+                and item.get("quoteAsset") == "USDT"
+                and item.get("isSpotTradingAllowed", True)
+            })
+            Clock.schedule_once(lambda dt: self.show_pairs(symbols), 0)
+        except Exception as exc:
+            message = str(exc)[:120]
+            Clock.schedule_once(lambda dt: self.pairs_error(message), 0)
+
+    def show_pairs(self, symbols):
+        self.pairs_loading = False
+        if symbols:
+            current = self.pair.text
+            self.pair.values = tuple(symbols)
+            self.pair_status.text = "{} active Binance Spot USDT pairs loaded. Tap the coin selector to choose any pair.".format(len(symbols))
+            if current not in symbols:
+                self.pair.text = "BTCUSDT" if "BTCUSDT" in symbols else symbols[0]
+        else:
+            self.pair_status.text = "Could not load pair list; showing the built-in popular pairs."
+
+    def pairs_error(self, message):
+        self.pairs_loading = False
+        self.pair_status.text = "Pair list unavailable; popular pairs remain selectable. " + message
 
     def heading(self, value):
         return Label(text="[b]"+value+"[/b]", markup=True, font_size="16sp", size_hint_y=None, height=dp(35))
