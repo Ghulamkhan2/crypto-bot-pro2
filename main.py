@@ -89,11 +89,13 @@ class CandleChart(Widget):
         c = self.data[idx]
         direction = "BULLISH (GREEN)" if c["close"] >= c["open"] else "BEARISH (RED)"
         stamp = c.get("time", c.get("open_time", ""))
+        move = c["close"] - c["open"]
+        move_pct = (move / c["open"] * 100.0) if c["open"] else 0.0
         self.detail_label.text = ("CANDLE: {} | O: {} | H: {} | L: {} | C: {} | VOL: {}".format(
             stamp, format(c["open"], ".8g"), format(c["high"], ".8g"),
             format(c["low"], ".8g"), format(c["close"], ".8g"),
             format(c.get("volume", 0), ".6g")) + "\n" + direction +
-            " | Candle {} / {}".format(idx+1, len(self.data)))
+            " | CHANGE: {:+.8g} ({:+.2f}%) | Candle {} / {}".format(move, move_pct, idx+1, len(self.data)))
 
     def zoom_in(self):
         self.zoom = min(8.0, self.zoom * 1.25)
@@ -175,7 +177,7 @@ class CandleChart(Widget):
     def redraw(self, *_):
         self.canvas.clear()
         if not self.data or self.width < 10 or self.height < 10: return
-        left, right = self.x + dp(8), self.right - dp(72)
+        left, right = self.x + dp(8), self.right - dp(94)
         bottom, top = self.y + dp(30), self.top - dp(12)
         chart_h = (top-bottom) * .78
         vol_h = (top-bottom) * .17
@@ -188,7 +190,9 @@ class CandleChart(Widget):
         ema50 = self.ema50[begin:end]
         if not candles: return
         vals = [v for c in candles for v in (c["high"], c["low"])]
-        lo, hi = min(vals), max(vals)
+        raw_lo, raw_hi = min(vals), max(vals)
+        raw_span = max(raw_hi - raw_lo, raw_hi * 0.001, 1e-8)
+        lo, hi = raw_lo - raw_span * 0.06, raw_hi + raw_span * 0.06
         if hi <= lo: hi = lo + 1
         def yval(v): return bottom + vol_h + gap + ((v-lo)/(hi-lo))*chart_h
         n = len(candles); display_slots = min(visible + 1.5, max(n, 1) + 1.5); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), min(dp(14), slot*.76))
@@ -200,10 +204,10 @@ class CandleChart(Widget):
                 yy = bottom + (top-bottom)*j/4
                 Line(points=[left,yy,right,yy],width=1)
                 price_value = lo + (hi-lo)*j/4
-                price_tag = CoreLabel(text=format(price_value, ".6g"), font_size=dp(10), color=(.82,.88,.96,1))
+                price_tag = CoreLabel(text=format(price_value, ".8g"), font_size=dp(11), color=(.90,.93,1,1))
                 price_tag.refresh()
                 Color(.82,.88,.96,1)
-                Rectangle(texture=price_tag.texture, pos=(self.right-dp(66), yy-price_tag.texture.height/2), size=price_tag.texture.size)
+                Rectangle(texture=price_tag.texture, pos=(self.right-dp(88), yy-price_tag.texture.height/2), size=price_tag.texture.size)
             for j in range(6):
                 xx = left + (right-left)*j/5
                 Line(points=[xx,bottom,xx,top],width=1)
@@ -224,8 +228,20 @@ class CandleChart(Widget):
                 Rectangle(pos=(x-candle_w/2,min(y1,y2)),size=(candle_w,max(dp(2),abs(y2-y1))))
             # Keep the candlestick area uncluttered; signals remain in the dashboard summary.
             # EMA overlays are hidden on the main chart for a clean Binance-style candle view.
-            Color(.15,.9,.75,.8)
-            Line(points=[left,yval(candles[-1]["close"]),right,yval(candles[-1]["close"])],width=1,dash_length=dp(4),dash_offset=dp(3))
+            last_price = candles[-1]["close"]
+            previous_close = candles[-2]["close"] if len(candles) > 1 else candles[-1]["open"]
+            price_delta = last_price - previous_close
+            price_color = (.02,.68,.38,1) if price_delta >= 0 else (.88,.12,.20,1)
+            last_y = yval(last_price)
+            Color(price_color[0],price_color[1],price_color[2],.95)
+            Line(points=[left,last_y,right,last_y],width=1.25,dash_length=dp(4),dash_offset=dp(3))
+            # Prominent live-price tag aligned with the latest candle on the right axis.
+            Color(*price_color)
+            RoundedRectangle(pos=(self.right-dp(91),last_y-dp(11)),size=(dp(88),dp(22)),radius=[dp(3)])
+            live_tag = CoreLabel(text=format(last_price, ".8g"),font_size=dp(11),bold=True,color=(1,1,1,1))
+            live_tag.refresh()
+            Color(1,1,1,1)
+            Rectangle(texture=live_tag.texture,pos=(self.right-dp(87),last_y-live_tag.texture.height/2),size=live_tag.texture.size)
             # Yellow selection line removed to keep candles unobstructed.
 
 class CryptoBotApp(App):
