@@ -103,3 +103,40 @@ def analyze_buy_signal(candles, minimum_score=80):
             "volume_ratio": last_volume / avg_volume if avg_volume else 0,
         },
     }
+
+
+def candle_trade_markers(candles, minimum_score=80):
+    """Historical confirmation markers: green BUY below, red SELL above."""
+    markers = []
+    if not candles or len(candles) < 60:
+        return markers
+    closes = [float(c["close"]) for c in candles]
+    volumes = [float(c.get("volume", 0)) for c in candles]
+    for end in range(60, len(candles) + 1):
+        cs = closes[:end]
+        vs = volumes[:end]
+        e20, e50 = _ema(cs, 20), _ema(cs, 50)
+        rsi = _rsi(cs, 14)
+        fast = _ema(cs, 12)
+        slow = _ema(cs, 26)
+        macd_series = []
+        for stop in range(26, end + 1):
+            part = cs[:stop]
+            macd_series.append(_ema(part, 12) - _ema(part, 26))
+        macd_signal = _ema(macd_series, 9) if len(macd_series) >= 9 else None
+        avg_vol = sum(vs[-21:-1]) / 20 if len(vs) >= 21 else 0
+        vol_ok = avg_vol > 0 and vs[-1] >= 1.2 * avg_vol
+        macd = fast - slow
+        bullish = (
+            e20 > e50, cs[-1] > e20, 50 <= rsi <= 68,
+            macd_signal is not None and macd > macd_signal, vol_ok
+        )
+        bearish = (
+            e20 < e50, cs[-1] < e20, rsi < 50,
+            macd_signal is not None and macd < macd_signal, vol_ok
+        )
+        if sum(bullish) >= minimum_score // 20:
+            markers.append({"index": end-1, "side": "BUY"})
+        elif sum(bearish) >= minimum_score // 20:
+            markers.append({"index": end-1, "side": "SELL"})
+    return markers
