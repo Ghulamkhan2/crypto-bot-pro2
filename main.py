@@ -15,6 +15,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.core.window import Window
+from kivy.core.text import Label as CoreLabel
 from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
 from indicators import analyze_buy_signal, candle_trade_markers
 from pump_scanner import scan_binance_spot
@@ -55,6 +56,7 @@ class CandleChart(Widget):
         self.offset = 0
         self._touches = {}
         self._pinch_distance = None
+        self._pan_remainder = 0.0
         self._touch_start = {}
         self.selected_index = -1
         self.detail_label = None
@@ -116,7 +118,9 @@ class CandleChart(Widget):
         if self.collide_point(*touch.pos):
             self._touches[touch] = touch.pos
             self._touch_start[touch] = touch.pos
-            if len(self._touches) == 2: self._pinch_distance = self._pinch_distance_now()
+            if len(self._touches) == 2:
+                self._pinch_distance = self._pinch_distance_now()
+                self._pan_remainder = 0.0
             touch.grab(self)
             return True
         return super().on_touch_down(touch)
@@ -133,8 +137,11 @@ class CandleChart(Widget):
             else:
                 dx = touch.x - old[0]
                 visible = max(6, min(len(self.data), int(80 / self.zoom)))
-                bars = int(round(dx / max(1, self.width-dp(73)) * visible))
+                pixels_per_candle = max(2.0, (self.width-dp(73)) / max(1, visible))
+                self._pan_remainder += dx
+                bars = int(self._pan_remainder / pixels_per_candle)
                 if bars:
+                    self._pan_remainder -= bars * pixels_per_candle
                     self.offset = max(0, min(max(0, len(self.data)-visible), self.offset + bars))
                     self.selected_index = max(0, min(len(self.data)-1, len(self.data)-self.offset-1))
                     self._update_detail()
@@ -148,6 +155,7 @@ class CandleChart(Widget):
             start = self._touch_start.pop(touch, touch.pos)
             self._touches.pop(touch, None)
             self._pinch_distance = self._pinch_distance_now()
+            if len(self._touches) < 2: self._pan_remainder = 0.0
             if not self._touches and not self._touch_start and self.data:
                 moved = ((touch.x-start[0])**2 + (touch.y-start[1])**2)**0.5
                 if moved < dp(12):
@@ -215,13 +223,21 @@ class CandleChart(Widget):
                 if side:
                     x = left + (i+.5)*slot
                     if side == "BUY":
-                        yy = max(bottom + vol_h + gap + dp(3), yval(c["low"]) - dp(10))
+                        yy = max(bottom + vol_h + gap + dp(13), yval(c["low"]) - dp(10))
                         Color(.02,1,.38,1)
                         Line(points=[x,yy, x-dp(6),yy-dp(9), x+dp(6),yy-dp(9), x,yy], close=True, width=dp(1.5))
+                        tag = CoreLabel(text="BUY", font_size=dp(10), bold=True, color=(.02,1,.38,1))
+                        tag.refresh()
+                        Color(1,1,1,1)
+                        Rectangle(texture=tag.texture, pos=(x-tag.texture.width/2, max(bottom+vol_h+gap, yy-dp(23))), size=tag.texture.size)
                     else:
-                        yy = min(top-dp(3), yval(c["high"]) + dp(10))
+                        yy = min(top-dp(15), yval(c["high"]) + dp(10))
                         Color(1,.16,.25,1)
                         Line(points=[x,yy, x-dp(6),yy+dp(9), x+dp(6),yy+dp(9), x,yy], close=True, width=dp(1.5))
+                        tag = CoreLabel(text="SELL", font_size=dp(10), bold=True, color=(1,.16,.25,1))
+                        tag.refresh()
+                        Color(1,1,1,1)
+                        Rectangle(texture=tag.texture, pos=(x-tag.texture.width/2, min(top-tag.texture.height, yy+dp(3))), size=tag.texture.size)
             for series, rgb in ((ema20,(.05,.72,1,1)),(ema50,(1,.62,.04,1))):
                 Color(*rgb)
                 pts=[]
