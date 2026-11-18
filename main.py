@@ -13,6 +13,8 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.spinner import Spinner
 from kivy.uix.scrollview import ScrollView
+from kivy.core.window import Window
+from kivy.graphics import Color, RoundedRectangle
 from indicators import analyze_buy_signal
 from pump_scanner import scan_binance_spot
 
@@ -42,6 +44,7 @@ def market_data(symbol):
 class CryptoBotApp(App):
     def build(self):
         self.title = "CRYPTO BOT PRO"
+        Window.clearcolor = (0.015, 0.025, 0.07, 1)
         self.minimum_buy_score = 80
         self.busy = False
         self.scan_running = False
@@ -54,15 +57,15 @@ class CryptoBotApp(App):
         scroll.add_widget(body)
         root.add_widget(scroll)
         body.add_widget(self.heading("SELECT BINANCE USDT COIN"))
-        self.pair = Spinner(text="BTCUSDT", values=tuple(PAIRS), size_hint_y=None, height=dp(48))
+        self.pair = Spinner(text="BTCUSDT", values=tuple(PAIRS), size_hint_y=None, height=dp(48), background_color=(0.95,0.68,0.05,1), color=(0.03,0.04,0.08,1))
         self.pair.bind(text=lambda *_: self.refresh_market())
         body.add_widget(self.pair)
         self.pair_status = self.info("Loading all Binance Spot USDT trading pairs...")
         body.add_widget(self.pair_status)
         buttons = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
-        refresh = Button(text="REFRESH LIVE DATA")
+        refresh = Button(text="↻ REFRESH LIVE DATA", background_normal="", background_color=(0.02,0.55,0.85,1), color=(1,1,1,1), bold=True)
         refresh.bind(on_release=lambda *_: self.refresh_market())
-        self.filter_btn = Button(text="BUY FILTER: 80%")
+        self.filter_btn = Button(text="BUY FILTER: 80%", background_normal="", background_color=(0.42,0.22,0.78,1), color=(1,1,1,1), bold=True)
         self.filter_btn.bind(on_release=lambda *_: self.toggle_filter())
         buttons.add_widget(refresh); buttons.add_widget(self.filter_btn); body.add_widget(buttons)
         self.price = self.info("Live price: loading...")
@@ -73,7 +76,7 @@ class CryptoBotApp(App):
         self.checks = self.info("Technical confirmations will appear here.")
         for widget in (self.price,self.day,self.signal,self.score,self.indicators,self.checks): body.add_widget(widget)
         body.add_widget(self.heading("MEME COIN EARLY PUMP SCANNER"))
-        scan = Button(text="SCAN BINANCE SPOT COINS NOW", size_hint_y=None, height=dp(50))
+        scan = Button(text="🚀 SCAN BINANCE SPOT COINS NOW", size_hint_y=None, height=dp(50), background_normal="", background_color=(0.68,0.12,0.88,1), color=(1,1,1,1), bold=True)
         scan.bind(on_release=lambda *_: self.start_scan()); body.add_widget(scan)
         self.scan_status = self.info("Scanner ready. Tap to scan live 5-minute market activity.")
         self.scan_results = self.info("Pump alerts will appear here.")
@@ -122,10 +125,10 @@ class CryptoBotApp(App):
         self.pair_status.text = "Pair list unavailable; popular pairs remain selectable. " + message
 
     def heading(self, value):
-        return Label(text="[b]"+value+"[/b]", markup=True, font_size="16sp", size_hint_y=None, height=dp(35))
+        return Label(text="[b][color=FFD21F]"+value+"[/color][/b]", markup=True, font_size="16sp", size_hint_y=None, height=dp(38), color=(1,1,1,1))
 
     def info(self, value):
-        label = Label(text=value, font_size="13sp", halign="left", valign="middle", size_hint_y=None, height=dp(52))
+        label = Label(text="[color=DBEAFE]"+value+"[/color]", markup=True, font_size="13sp", halign="left", valign="middle", size_hint_y=None, height=dp(52), color=(0.86,0.92,1,1))
         label.bind(width=lambda obj,w: setattr(obj,"text_size",(w,None)), texture_size=lambda obj,s: setattr(obj,"height",max(dp(42),s[1]+dp(10))))
         return label
 
@@ -166,8 +169,9 @@ class CryptoBotApp(App):
         decision=result.get("decision","WAIT")
         if decision=="WAIT" and ind and ind.get("price",0)<ind.get("ema20",0)<ind.get("ema50",0) and ind.get("rsi14",50)<45:
             decision="SELL / EXIT WARNING"
-        self.signal.text="SIGNAL: "+decision
-        self.score.text="BUY CONFIDENCE: {}% | Required: {}%".format(result.get("score",0),self.minimum_buy_score)
+        signal_color = "20E070" if decision == "BUY" else ("FF4D6D" if "SELL" in decision else "FFD21F")
+        self.signal.text="[b][color={}]SIGNAL: {}[/color][/b]".format(signal_color, decision)
+        self.score.text="[b][color=54D6FF]BUY CONFIDENCE: {}% | Required: {}%[/color][/b]".format(result.get("score",0),self.minimum_buy_score)
         if ind:
             self.indicators.text="RSI(14): {:.1f} | EMA20: {} | EMA50: {}".format(ind["rsi14"],format(ind["ema20"],".8g"),format(ind["ema50"],".8g"))
         else:
@@ -179,17 +183,21 @@ class CryptoBotApp(App):
         if self.scan_running:
             self.scan_status.text="Scan already running..."; return
         self.scan_running=True
-        self.scan_status.text="Connecting to Binance; scanning liquid USDT pairs..."
+        self.scan_status.text="[color=54D6FF]Connecting to Binance; preparing scan...[/color]"
         self.scan_results.text="Checking volume surge, 5m momentum and aggressive buying..."
         threading.Thread(target=self.scan_worker,daemon=True).start()
 
     def scan_worker(self):
         try:
-            results=scan_binance_spot()
+            results=scan_binance_spot(on_progress=lambda done,total,symbol: Clock.schedule_once(lambda dt: self.update_scan_progress(done,total,symbol),0))
             Clock.schedule_once(lambda dt:self.show_scan(results),0)
         except Exception as exc:
             message=str(exc)[:150]
             Clock.schedule_once(lambda dt:self.scan_error(message),0)
+
+    def update_scan_progress(self, done, total, symbol):
+        if self.scan_running:
+            self.scan_status.text="[color=54D6FF]Scanning {}/{}: {}[/color]".format(done,total,symbol)
 
     def scan_error(self,message):
         self.scan_running=False
@@ -198,7 +206,7 @@ class CryptoBotApp(App):
     def show_scan(self,results):
         self.scan_running=False
         alerts=[x for x in results if x.get("alert")]
-        self.scan_status.text="{} pairs checked | {} early alerts".format(len(results),len(alerts))
+        self.scan_status.text="[b][color=20E070]SCAN COMPLETE: {} pairs checked | {} early alerts[/color][/b]".format(len(results),len(alerts))
         if not results:
             self.scan_results.text="No eligible USDT pairs returned."; return
         rows=[]
