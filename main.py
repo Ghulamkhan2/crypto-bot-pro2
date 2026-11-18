@@ -287,7 +287,7 @@ class CryptoBotApp(App):
             b.bind(on_release=lambda btn, iv=interval: self.set_interval(iv))
             self.tf_buttons[interval] = b; tfrow.add_widget(b)
         body.add_widget(tfrow)
-        self.chart = CandleChart(size_hint_y=None, height=dp(390))
+        self.chart = CandleChart(size_hint_y=None, height=dp(540))
         body.add_widget(self.chart)
         self.candle_detail = self.info("Tap any candle to inspect it. Latest candle is selected by default.")
         self.candle_detail.height = dp(68)
