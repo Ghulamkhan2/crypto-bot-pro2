@@ -16,7 +16,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 from kivy.core.window import Window
 from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
-from indicators import analyze_buy_signal
+from indicators import analyze_buy_signal, candle_trade_markers
 from pump_scanner import scan_binance_spot
 
 BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
@@ -50,6 +50,7 @@ class CandleChart(Widget):
         self.data = []
         self.ema20 = []
         self.ema50 = []
+        self.markers = []
         self.zoom = 1.0
         self.offset = 0
         self._touches = {}
@@ -64,6 +65,7 @@ class CandleChart(Widget):
         closes = [c["close"] for c in self.data]
         self.ema20 = self._ema(closes, 20)
         self.ema50 = self._ema(closes, 50)
+        self.markers = candle_trade_markers(self.data, 80)
         self.offset = min(self.offset, max(0, len(self.data)-12))
         self.selected_index = len(self.data)-1
         self._update_detail()
@@ -206,6 +208,20 @@ class CandleChart(Widget):
                 Line(points=[x,yval(c["low"]),x,yval(c["high"])],width=1.25)
                 y1,y2 = yval(c["open"]),yval(c["close"])
                 Rectangle(pos=(x-candle_w/2,min(y1,y2)),size=(candle_w,max(dp(2),abs(y2-y1))))
+            # Confirmed BUY markers are green triangles below candles; SELL markers are red triangles above.
+            marker_by_index = {m["index"]: m["side"] for m in self.markers}
+            for i,c in enumerate(candles):
+                side = marker_by_index.get(begin+i)
+                if side:
+                    x = left + (i+.5)*slot
+                    if side == "BUY":
+                        yy = max(bottom + vol_h + gap + dp(3), yval(c["low"]) - dp(10))
+                        Color(.02,1,.38,1)
+                        Line(points=[x,yy, x-dp(6),yy-dp(9), x+dp(6),yy-dp(9), x,yy], close=True, width=dp(1.5))
+                    else:
+                        yy = min(top-dp(3), yval(c["high"]) + dp(10))
+                        Color(1,.16,.25,1)
+                        Line(points=[x,yy, x-dp(6),yy+dp(9), x+dp(6),yy+dp(9), x,yy], close=True, width=dp(1.5))
             for series, rgb in ((ema20,(.05,.72,1,1)),(ema50,(1,.62,.04,1))):
                 Color(*rgb)
                 pts=[]
@@ -261,6 +277,9 @@ class CryptoBotApp(App):
         self.candle_detail.height = dp(68)
         self.chart.detail_label = self.candle_detail
         body.add_widget(self.candle_detail)
+        self.marker_legend = self.info("[color=20E070]▲ BUY[/color] below candle     [color=FF4D6D]▼ SELL[/color] above candle (80% confirmation)")
+        self.marker_legend.height = dp(34)
+        body.add_widget(self.marker_legend)
         self.day = self.info("24h change: -- | 24h volume: --")
         self.signal = self.info("SIGNAL: WAIT")
         self.score = self.info("BUY CONFIDENCE: --")
