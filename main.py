@@ -91,11 +91,11 @@ class CandleChart(Widget):
             " | Candle {} / {}".format(idx+1, len(self.data)))
 
     def zoom_in(self):
-        self.zoom = min(8.0, self.zoom * 1.25)
+        self.zoom = min(12.0, self.zoom * 1.25)
         self.redraw()
 
     def zoom_out(self):
-        self.zoom = max(1.0, self.zoom / 1.25)
+        self.zoom = max(0.25, self.zoom / 1.25)
         self.offset = min(self.offset, max(0, len(self.data)-12))
         self.redraw()
 
@@ -126,13 +126,16 @@ class CandleChart(Widget):
             if len(self._touches) >= 2:
                 distance = self._pinch_distance_now()
                 if self._pinch_distance and distance:
-                    self.zoom = max(1.0, min(8.0, self.zoom * distance / self._pinch_distance))
+                    self.zoom = max(0.25, min(12.0, self.zoom * distance / self._pinch_distance))
                 self._pinch_distance = distance
             else:
                 dx = touch.x - old[0]
-                visible = max(12, int(len(self.data) / self.zoom))
-                bars = int(round(dx / max(1, self.width-dp(56)) * visible))
-                if bars: self.offset = max(0, min(max(0, len(self.data)-visible), self.offset + bars))
+                visible = max(6, min(len(self.data), int(80 / self.zoom)))
+                bars = int(round(dx / max(1, self.width-dp(73)) * visible))
+                if bars:
+                    self.offset = max(0, min(max(0, len(self.data)-visible), self.offset + bars))
+                    self.selected_index = max(0, min(len(self.data)-1, len(self.data)-self.offset-1))
+                    self._update_detail()
             self.redraw()
             return True
         return super().on_touch_move(touch)
@@ -147,7 +150,7 @@ class CandleChart(Widget):
                 moved = ((touch.x-start[0])**2 + (touch.y-start[1])**2)**0.5
                 if moved < dp(12):
                     left, right = self.x + dp(8), self.right - dp(65)
-                    visible = max(12, min(len(self.data), int(len(self.data)/self.zoom)))
+                    visible = max(6, min(len(self.data), int(80/self.zoom)))
                     end = max(1, len(self.data)-self.offset)
                     begin = max(0, end-visible)
                     slot = (right-left)/max(1,end-begin)
@@ -166,7 +169,7 @@ class CandleChart(Widget):
         chart_h = (top-bottom) * .78
         vol_h = (top-bottom) * .17
         gap = (top-bottom) * .05
-        visible = max(12, min(len(self.data), int(len(self.data) / self.zoom)))
+        visible = max(6, min(len(self.data), int(80 / self.zoom)))
         end = max(1, len(self.data) - self.offset)
         begin = max(0, end - visible)
         candles = self.data[begin:end]
@@ -252,16 +255,7 @@ class CryptoBotApp(App):
             b.bind(on_release=lambda btn, iv=interval: self.set_interval(iv))
             self.tf_buttons[interval] = b; tfrow.add_widget(b)
         body.add_widget(tfrow)
-        zoomrow = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
-        zoomout = Button(text="− ZOOM OUT", background_normal="", background_color=(.08,.20,.32,1), color=(1,1,1,1), bold=True)
-        zoomin = Button(text="+ ZOOM IN", background_normal="", background_color=(.02,.55,.85,1), color=(1,1,1,1), bold=True)
-        resetzoom = Button(text="RESET VIEW", background_normal="", background_color=(.95,.68,.05,1), color=(.02,.03,.06,1), bold=True)
-        zoomout.bind(on_release=lambda *_: self.chart.zoom_out())
-        zoomin.bind(on_release=lambda *_: self.chart.zoom_in())
-        resetzoom.bind(on_release=lambda *_: self.chart.reset_view())
-        zoomrow.add_widget(zoomout); zoomrow.add_widget(zoomin); zoomrow.add_widget(resetzoom)
-        body.add_widget(zoomrow)
-        self.chart = CandleChart(size_hint_y=None, height=dp(340))
+        self.chart = CandleChart(size_hint_y=None, height=dp(390))
         body.add_widget(self.chart)
         self.candle_detail = self.info("Tap any candle to inspect it. Latest candle is selected by default.")
         self.candle_detail.height = dp(68)
