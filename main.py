@@ -50,7 +50,7 @@ class CryptoBotApp(App):
         self.scan_running = False
         self.pairs_loading = False
         root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(6))
-        root.add_widget(Label(text="[b]CRYPTO BOT PRO[/b]\nBINANCE SPOT LIVE DASHBOARD", markup=True, font_size="21sp", size_hint_y=None, height=dp(62)))
+        root.add_widget(Label(text="[b][color=FFD21F]◆ CRYPTO BOT PRO[/color][/b]\n[color=65C7FF]BINANCE SPOT LIVE DASHBOARD[/color]", markup=True, font_size="21sp", size_hint_y=None, height=dp(68), color=(1,1,1,1)))
         scroll = ScrollView(do_scroll_x=False)
         body = BoxLayout(orientation="vertical", spacing=dp(7), padding=(0,dp(4)), size_hint_y=None)
         body.bind(minimum_height=body.setter("height"))
