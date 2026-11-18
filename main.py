@@ -53,7 +53,7 @@ class CandleChart(Widget):
         self.ema20 = []
         self.ema50 = []
         self.markers = []
-        self.zoom = 1.7
+        self.zoom = 3.0
         self.offset = 0
         self._touches = {}
         self._pinch_distance = None
@@ -105,7 +105,7 @@ class CandleChart(Widget):
         self.redraw()
 
     def reset_view(self):
-        self.zoom = 1.7
+        self.zoom = 3.0
         self.offset = 0
         self.redraw()
 
@@ -222,33 +222,8 @@ class CandleChart(Widget):
                 Line(points=[x,yval(c["low"]),x,yval(c["high"])],width=1.25)
                 y1,y2 = yval(c["open"]),yval(c["close"])
                 Rectangle(pos=(x-candle_w/2,min(y1,y2)),size=(candle_w,max(dp(2),abs(y2-y1))))
-            # Confirmed BUY markers are green triangles below candles; SELL markers are red triangles above.
-            marker_by_index = {m["index"]: m["side"] for m in self.markers}
-            for i,c in enumerate(candles):
-                side = marker_by_index.get(begin+i)
-                if side:
-                    x = left + (i+.5)*slot
-                    if side == "BUY":
-                        yy = max(bottom + vol_h + gap + dp(13), yval(c["low"]) - dp(10))
-                        Color(.02,1,.38,1)
-                        Line(points=[x,yy, x-dp(6),yy-dp(9), x+dp(6),yy-dp(9), x,yy], close=True, width=dp(1.5))
-                        tag = CoreLabel(text="BUY", font_size=dp(10), bold=True, color=(.02,1,.38,1))
-                        tag.refresh()
-                        Color(1,1,1,1)
-                        Rectangle(texture=tag.texture, pos=(x-tag.texture.width/2, max(bottom+vol_h+gap, yy-dp(23))), size=tag.texture.size)
-                    else:
-                        yy = min(top-dp(15), yval(c["high"]) + dp(10))
-                        Color(1,.16,.25,1)
-                        Line(points=[x,yy, x-dp(6),yy+dp(9), x+dp(6),yy+dp(9), x,yy], close=True, width=dp(1.5))
-                        tag = CoreLabel(text="SELL", font_size=dp(10), bold=True, color=(1,.16,.25,1))
-                        tag.refresh()
-                        Color(1,1,1,1)
-                        Rectangle(texture=tag.texture, pos=(x-tag.texture.width/2, min(top-tag.texture.height, yy+dp(3))), size=tag.texture.size)
-            for series, rgb in ((ema20,(.05,.72,1,1)),(ema50,(1,.62,.04,1))):
-                Color(*rgb)
-                pts=[]
-                for i,v in enumerate(series): pts.extend([left+(i+.5)*slot,yval(v)])
-                if len(pts)>=4: Line(points=pts,width=dp(1.6))
+            # Keep the candlestick area uncluttered; signals remain in the dashboard summary.
+            # EMA overlays are hidden on the main chart for a clean Binance-style candle view.
             Color(.15,.9,.75,.8)
             Line(points=[left,yval(candles[-1]["close"]),right,yval(candles[-1]["close"])],width=1,dash_length=dp(4),dash_offset=dp(3))
             # Yellow selection line removed to keep candles unobstructed.
