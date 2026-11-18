@@ -50,6 +50,10 @@ class CandleChart(Widget):
         self.data = []
         self.ema20 = []
         self.ema50 = []
+        self.zoom = 1.0
+        self.offset = 0
+        self._touches = {}
+        self._pinch_distance = None
         self.bind(pos=self.redraw, size=self.redraw)
 
     def set_data(self, candles, indicators=None):
@@ -57,6 +61,7 @@ class CandleChart(Widget):
         closes = [c["close"] for c in self.data]
         self.ema20 = self._ema(closes, 20)
         self.ema50 = self._ema(closes, 50)
+        self.offset = min(self.offset, max(0, len(self.data)-12))
         self.redraw()
 
     @staticmethod
@@ -67,6 +72,61 @@ class CandleChart(Widget):
         for value in values[1:]: out.append(value * alpha + out[-1] * (1-alpha))
         return out
 
+
+    def zoom_in(self):
+        self.zoom = min(8.0, self.zoom * 1.25)
+        self.redraw()
+
+    def zoom_out(self):
+        self.zoom = max(1.0, self.zoom / 1.25)
+        self.offset = min(self.offset, max(0, len(self.data)-12))
+        self.redraw()
+
+    def reset_view(self):
+        self.zoom = 1.0
+        self.offset = 0
+        self.redraw()
+
+    def _pinch_distance_now(self):
+        if len(self._touches) < 2: return None
+        pts = list(self._touches.values())
+        dx, dy = pts[0][0]-pts[1][0], pts[0][1]-pts[1][1]
+        return max(1.0, (dx*dx+dy*dy)**0.5)
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self._touches[touch] = touch.pos
+            if len(self._touches) == 2: self._pinch_distance = self._pinch_distance_now()
+            touch.grab(self)
+            return True
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if touch.grab_current is self and touch in self._touches:
+            old = self._touches[touch]
+            self._touches[touch] = touch.pos
+            if len(self._touches) >= 2:
+                distance = self._pinch_distance_now()
+                if self._pinch_distance and distance:
+                    self.zoom = max(1.0, min(8.0, self.zoom * distance / self._pinch_distance))
+                self._pinch_distance = distance
+            else:
+                dx = touch.x - old[0]
+                visible = max(12, int(len(self.data) / self.zoom))
+                bars = int(round(dx / max(1, self.width-dp(56)) * visible))
+                if bars: self.offset = max(0, min(max(0, len(self.data)-visible), self.offset + bars))
+            self.redraw()
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            self._touches.pop(touch, None)
+            self._pinch_distance = self._pinch_distance_now()
+            return True
+        return super().on_touch_up(touch)
+
     def redraw(self, *_):
         self.canvas.clear()
         if not self.data or self.width < 10 or self.height < 10: return
@@ -75,12 +135,19 @@ class CandleChart(Widget):
         chart_h = (top-bottom) * .78
         vol_h = (top-bottom) * .17
         gap = (top-bottom) * .05
-        vals = [v for c in self.data for v in (c["high"], c["low"])]
+        visible = max(12, min(len(self.data), int(len(self.data) / self.zoom)))
+        end = max(1, len(self.data) - self.offset)
+        begin = max(0, end - visible)
+        candles = self.data[begin:end]
+        ema20 = self.ema20[begin:end]
+        ema50 = self.ema50[begin:end]
+        if not candles: return
+        vals = [v for c in candles for v in (c["high"], c["low"])]
         lo, hi = min(vals), max(vals)
         if hi <= lo: hi = lo + 1
         def yval(v): return bottom + vol_h + gap + ((v-lo)/(hi-lo))*chart_h
-        n = len(self.data); slot = (right-left)/max(n,1); candle_w = max(dp(2), slot*.62)
-        maxvol = max((c.get("volume",0) for c in self.data), default=1) or 1
+        n = len(candles); slot = (right-left)/max(n,1); candle_w = max(dp(2), slot*.68)
+        maxvol = max((c.get("volume",0) for c in candles), default=1) or 1
         with self.canvas:
             Color(.025,.055,.11,1); Rectangle(pos=(left,bottom),size=(right-left,top-bottom))
             Color(.12,.20,.30,1)
@@ -90,7 +157,7 @@ class CandleChart(Widget):
             for j in range(6):
                 xx = left + (right-left)*j/5
                 Line(points=[xx,bottom,xx,top],width=1)
-            for i,c in enumerate(self.data):
+            for i,c in enumerate(candles):
                 x = left + (i+.5)*slot
                 green = c["close"] >= c["open"]
                 if green: Color(.02,.78,.42,.9)
@@ -105,13 +172,13 @@ class CandleChart(Widget):
                 Line(points=[x,yval(c["low"]),x,yval(c["high"])],width=1.25)
                 y1,y2 = yval(c["open"]),yval(c["close"])
                 Rectangle(pos=(x-candle_w/2,min(y1,y2)),size=(candle_w,max(dp(2),abs(y2-y1))))
-            for series, rgb in ((self.ema20,(.05,.72,1,1)),(self.ema50,(1,.62,.04,1))):
+            for series, rgb in ((ema20,(.05,.72,1,1)),(ema50,(1,.62,.04,1))):
                 Color(*rgb)
                 pts=[]
                 for i,v in enumerate(series): pts.extend([left+(i+.5)*slot,yval(v)])
                 if len(pts)>=4: Line(points=pts,width=dp(1.6))
             Color(.15,.9,.75,.8)
-            Line(points=[left,yval(self.data[-1]["close"]),right,yval(self.data[-1]["close"])],width=1,dash_length=dp(4),dash_offset=dp(3))
+            Line(points=[left,yval(candles[-1]["close"]),right,yval(candles[-1]["close"])],width=1,dash_length=dp(4),dash_offset=dp(3))
 
 class CryptoBotApp(App):
     def build(self):
@@ -149,7 +216,16 @@ class CryptoBotApp(App):
             b.bind(on_release=lambda btn, iv=interval: self.set_interval(iv))
             self.tf_buttons[interval] = b; tfrow.add_widget(b)
         body.add_widget(tfrow)
-        self.chart = CandleChart(size_hint_y=None, height=dp(270))
+        zoomrow = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
+        zoomout = Button(text="− ZOOM OUT", background_normal="", background_color=(.08,.20,.32,1), color=(1,1,1,1), bold=True)
+        zoomin = Button(text="+ ZOOM IN", background_normal="", background_color=(.02,.55,.85,1), color=(1,1,1,1), bold=True)
+        resetzoom = Button(text="RESET VIEW", background_normal="", background_color=(.95,.68,.05,1), color=(.02,.03,.06,1), bold=True)
+        zoomout.bind(on_release=lambda *_: self.chart.zoom_out())
+        zoomin.bind(on_release=lambda *_: self.chart.zoom_in())
+        resetzoom.bind(on_release=lambda *_: self.chart.reset_view())
+        zoomrow.add_widget(zoomout); zoomrow.add_widget(zoomin); zoomrow.add_widget(resetzoom)
+        body.add_widget(zoomrow)
+        self.chart = CandleChart(size_hint_y=None, height=dp(300))
         body.add_widget(self.chart)
         self.day = self.info("24h change: -- | 24h volume: --")
         self.signal = self.info("SIGNAL: WAIT")
