@@ -191,7 +191,7 @@ class CandleChart(Widget):
         lo, hi = min(vals), max(vals)
         if hi <= lo: hi = lo + 1
         def yval(v): return bottom + vol_h + gap + ((v-lo)/(hi-lo))*chart_h
-        n = len(candles); display_slots = min(visible + 3, max(n, 1) + 3); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), min(dp(14), slot*.76))
+        n = len(candles); display_slots = min(visible + 1.5, max(n, 1) + 1.5); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), min(dp(14), slot*.76))
         maxvol = max((c.get("volume",0) for c in candles), default=1) or 1
         with self.canvas:
             Color(.025,.055,.11,1); Rectangle(pos=(left,bottom),size=(right-left,top-bottom))
@@ -257,7 +257,8 @@ class CryptoBotApp(App):
         self.filter_btn = Button(text="BUY FILTER: 80%", background_normal="", background_color=(0.42,0.22,0.78,1), color=(1,1,1,1), bold=True)
         self.filter_btn.bind(on_release=lambda *_: self.toggle_filter())
         buttons.add_widget(refresh); buttons.add_widget(self.filter_btn); body.add_widget(buttons)
-        self.price = self.info("Live price: loading...")
+        self.price = self.info("[b]LIVE PRICE: loading...[/b]")
+        self.price.height = dp(58)
         tfrow = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(4))
         self.tf_buttons = {}
         for label, interval in (("1m","1m"),("5m","5m"),("15m","15m"),("30m","30m"),("1h","1h"),("4h","4h"),("1D","1d")):
@@ -381,8 +382,9 @@ class CryptoBotApp(App):
         price=float(ticker.get("lastPrice",0))
         change=float(ticker.get("priceChangePercent",0))
         volume=float(ticker.get("quoteVolume",0))
-        self.price.text="{} [{}] LIVE PRICE: {}".format(symbol,interval.upper(),format(price,".8g"))
-        self.day.text="24h change: {:+.2f}% | 24h quote volume: {:,.0f} USDT".format(change,volume)
+        self.price.text="[b]{} / {}[/b]     [b]{}[/b]   [color={}]{}{:+.2f}%[/color]".format(symbol[:-4],symbol[-4:],format(price,".8g"),"20E070" if change>=0 else "FF4D6D","" if change>=0 else "",change)
+        high=float(ticker.get("highPrice",0)); low=float(ticker.get("lowPrice",0)); base_volume=float(ticker.get("volume",0))
+        self.day.text="24h HIGH: {}   LOW: {}\n24h CHANGE: {:+.2f}%   VOL: {:,.3g} {} / {:,.3g} USDT".format(format(high,".8g"),format(low,".8g"),change,base_volume,symbol.replace("USDT",""),volume)
         ind=result.get("indicators",{})
         self.chart.set_data(candles,ind)
         decision=result.get("decision","WAIT")
