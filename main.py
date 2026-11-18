@@ -1,5 +1,6 @@
 """CRYPTO BOT PRO - Binance Spot live dashboard; public data only, no order execution."""
 import json
+from datetime import datetime, timezone
 import ssl
 import certifi
 import threading
@@ -40,7 +41,7 @@ def api(path, params=None):
 def market_data(symbol, interval="1h"):
     ticker = api("/api/v3/ticker/24hr", {"symbol":symbol})
     raw = api("/api/v3/klines", {"symbol":symbol,"interval":interval,"limit":100})
-    candles = [{"open":float(k[1]),"high":float(k[2]),"low":float(k[3]),"close":float(k[4]),"volume":float(k[5])} for k in raw]
+    candles = [{"open":float(k[1]),"high":float(k[2]),"low":float(k[3]),"close":float(k[4]),"volume":float(k[5]),"open_time":int(k[0]),"time":datetime.fromtimestamp(k[0]/1000, timezone.utc).strftime("%m-%d %H:%M")} for k in raw]
     return ticker, candles
 
 
@@ -68,7 +69,7 @@ class CandleChart(Widget):
         self.ema20 = self._ema(closes, 20)
         self.ema50 = self._ema(closes, 50)
         self.markers = candle_trade_markers(self.data, 80)
-        self.offset = min(self.offset, max(0, len(self.data)-12))
+        self.offset = 0
         self.selected_index = len(self.data)-1
         self._update_detail()
         self.redraw()
@@ -190,7 +191,7 @@ class CandleChart(Widget):
         lo, hi = min(vals), max(vals)
         if hi <= lo: hi = lo + 1
         def yval(v): return bottom + vol_h + gap + ((v-lo)/(hi-lo))*chart_h
-        n = len(candles); slot = (right-left)/max(n,1); candle_w = max(dp(2), slot*.68)
+        n = len(candles); display_slots = min(visible + 3, max(n, 1) + 3); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), slot*.68)
         maxvol = max((c.get("volume",0) for c in candles), default=1) or 1
         with self.canvas:
             Color(.025,.055,.11,1); Rectangle(pos=(left,bottom),size=(right-left,top-bottom))
@@ -257,6 +258,7 @@ class CryptoBotApp(App):
         Window.clearcolor = (0.015, 0.025, 0.07, 1)
         self.minimum_buy_score = 80
         self.busy = False
+        self.market_request_id = 0
         self.scan_running = False
         self.pairs_loading = False
         self.interval = "1h"
@@ -282,7 +284,7 @@ class CryptoBotApp(App):
         self.price = self.info("Live price: loading...")
         tfrow = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(4))
         self.tf_buttons = {}
-        for label, interval in (("1m","1m"),("5m","5m"),("15m","15m"),("1h","1h"),("4h","4h"),("1D","1d")):
+        for label, interval in (("1m","1m"),("5m","5m"),("15m","15m"),("30m","30m"),("1h","1h"),("4h","4h"),("1D","1d")):
             b = Button(text=label, background_normal="", background_color=(.95,.68,.05,1) if interval == self.interval else (.06,.12,.22,1), color=(.02,.03,.06,1) if interval == self.interval else (1,1,1,1), font_size="12sp")
             b.bind(on_release=lambda btn, iv=interval: self.set_interval(iv))
             self.tf_buttons[interval] = b; tfrow.add_widget(b)
@@ -373,32 +375,37 @@ class CryptoBotApp(App):
         self.refresh_market()
 
     def refresh_market(self):
-        if self.busy: return
-        self.busy = True
+        self.market_request_id += 1
+        request_id = self.market_request_id
         symbol = self.pair.text
-        self.price.text = "Loading {} from Binance...".format(symbol)
-        threading.Thread(target=self.market_worker,args=(symbol,),daemon=True).start()
+        interval = self.interval
+        score_threshold = self.minimum_buy_score
+        self.busy = True
+        self.price.text = "Loading {} {} candles from Binance...".format(symbol, interval.upper())
+        threading.Thread(target=self.market_worker,args=(symbol,interval,score_threshold,request_id),daemon=True).start()
 
-    def market_worker(self,symbol):
+    def market_worker(self,symbol,interval,score_threshold,request_id):
         try:
-            ticker,candles = market_data(symbol,self.interval)
-            result = analyze_buy_signal(candles,self.minimum_buy_score)
-            Clock.schedule_once(lambda dt:self.show_market(symbol,ticker,result,candles),0)
+            ticker,candles = market_data(symbol,interval)
+            result = analyze_buy_signal(candles,score_threshold)
+            Clock.schedule_once(lambda dt:self.show_market(symbol,interval,ticker,result,candles,request_id),0)
         except Exception as exc:
             message=str(exc)[:150]
-            Clock.schedule_once(lambda dt:self.market_error(message),0)
+            Clock.schedule_once(lambda dt:self.market_error(message,request_id),0)
 
-    def market_error(self,message):
+    def market_error(self,message,request_id):
+        if request_id != self.market_request_id: return
         self.busy=False
         self.price.text="Binance connection error: "+message
         self.signal.text="SIGNAL: WAIT - refresh when connected"
 
-    def show_market(self,symbol,ticker,result,candles):
+    def show_market(self,symbol,interval,ticker,result,candles,request_id):
+        if request_id != self.market_request_id: return
         self.busy=False
         price=float(ticker.get("lastPrice",0))
         change=float(ticker.get("priceChangePercent",0))
         volume=float(ticker.get("quoteVolume",0))
-        self.price.text="{} LIVE PRICE: {}".format(symbol,format(price,".8g"))
+        self.price.text="{} [{}] LIVE PRICE: {}".format(symbol,interval.upper(),format(price,".8g"))
         self.day.text="24h change: {:+.2f}% | 24h quote volume: {:,.0f} USDT".format(change,volume)
         ind=result.get("indicators",{})
         self.chart.set_data(candles,ind)
