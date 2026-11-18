@@ -53,7 +53,7 @@ class CandleChart(Widget):
         self.ema20 = []
         self.ema50 = []
         self.markers = []
-        self.zoom = 1.0
+        self.zoom = 1.7
         self.offset = 0
         self._touches = {}
         self._pinch_distance = None
@@ -96,16 +96,16 @@ class CandleChart(Widget):
             " | Candle {} / {}".format(idx+1, len(self.data)))
 
     def zoom_in(self):
-        self.zoom = min(12.0, self.zoom * 1.25)
+        self.zoom = min(8.0, self.zoom * 1.25)
         self.redraw()
 
     def zoom_out(self):
-        self.zoom = max(0.25, self.zoom / 1.25)
+        self.zoom = max(0.35, self.zoom / 1.25)
         self.offset = min(self.offset, max(0, len(self.data)-12))
         self.redraw()
 
     def reset_view(self):
-        self.zoom = 1.0
+        self.zoom = 1.7
         self.offset = 0
         self.redraw()
 
@@ -133,11 +133,11 @@ class CandleChart(Widget):
             if len(self._touches) >= 2:
                 distance = self._pinch_distance_now()
                 if self._pinch_distance and distance:
-                    self.zoom = max(0.25, min(12.0, self.zoom * distance / self._pinch_distance))
+                    self.zoom = max(0.35, min(8.0, self.zoom * distance / self._pinch_distance))
                 self._pinch_distance = distance
             else:
                 dx = touch.x - old[0]
-                visible = max(6, min(len(self.data), int(80 / self.zoom)))
+                visible = max(6, min(len(self.data), int(68 / self.zoom)))
                 pixels_per_candle = max(2.0, (self.width-dp(73)) / max(1, visible))
                 self._pan_remainder += dx
                 bars = int(self._pan_remainder / pixels_per_candle)
@@ -161,7 +161,7 @@ class CandleChart(Widget):
                 moved = ((touch.x-start[0])**2 + (touch.y-start[1])**2)**0.5
                 if moved < dp(12):
                     left, right = self.x + dp(8), self.right - dp(65)
-                    visible = max(6, min(len(self.data), int(80/self.zoom)))
+                    visible = max(6, min(len(self.data), int(68/self.zoom)))
                     end = max(1, len(self.data)-self.offset)
                     begin = max(0, end-visible)
                     slot = (right-left)/max(1,end-begin)
@@ -175,7 +175,7 @@ class CandleChart(Widget):
     def redraw(self, *_):
         self.canvas.clear()
         if not self.data or self.width < 10 or self.height < 10: return
-        left, right = self.x + dp(8), self.right - dp(65)
+        left, right = self.x + dp(8), self.right - dp(72)
         bottom, top = self.y + dp(30), self.top - dp(12)
         chart_h = (top-bottom) * .78
         vol_h = (top-bottom) * .17
@@ -191,7 +191,7 @@ class CandleChart(Widget):
         lo, hi = min(vals), max(vals)
         if hi <= lo: hi = lo + 1
         def yval(v): return bottom + vol_h + gap + ((v-lo)/(hi-lo))*chart_h
-        n = len(candles); display_slots = min(visible + 3, max(n, 1) + 3); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), slot*.68)
+        n = len(candles); display_slots = min(visible + 3, max(n, 1) + 3); slot = (right-left)/max(display_slots,1); candle_w = max(dp(2), min(dp(14), slot*.76))
         maxvol = max((c.get("volume",0) for c in candles), default=1) or 1
         with self.canvas:
             Color(.025,.055,.11,1); Rectangle(pos=(left,bottom),size=(right-left,top-bottom))
@@ -199,6 +199,11 @@ class CandleChart(Widget):
             for j in range(5):
                 yy = bottom + (top-bottom)*j/4
                 Line(points=[left,yy,right,yy],width=1)
+                price_value = lo + (hi-lo)*j/4
+                price_tag = CoreLabel(text=format(price_value, ".6g"), font_size=dp(10), color=(.82,.88,.96,1))
+                price_tag.refresh()
+                Color(.82,.88,.96,1)
+                Rectangle(texture=price_tag.texture, pos=(self.right-dp(66), yy-price_tag.texture.height/2), size=price_tag.texture.size)
             for j in range(6):
                 xx = left + (right-left)*j/5
                 Line(points=[xx,bottom,xx,top],width=1)
@@ -246,11 +251,7 @@ class CandleChart(Widget):
                 if len(pts)>=4: Line(points=pts,width=dp(1.6))
             Color(.15,.9,.75,.8)
             Line(points=[left,yval(candles[-1]["close"]),right,yval(candles[-1]["close"])],width=1,dash_length=dp(4),dash_offset=dp(3))
-            selected = self.selected_index if self.selected_index >= 0 else len(self.data)-1
-            if begin <= selected < end:
-                sx = left + (selected-begin+.5)*slot
-                Color(.95,.82,.18,.95)
-                Line(points=[sx,bottom,sx,top],width=dp(1),dash_length=dp(4),dash_offset=dp(3))
+            # Yellow selection line removed to keep candles unobstructed.
 
 class CryptoBotApp(App):
     def build(self):
