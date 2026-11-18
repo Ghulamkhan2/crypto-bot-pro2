@@ -41,8 +41,9 @@ def api(path, params=None):
 def market_data(symbol, interval="1h"):
     ticker = api("/api/v3/ticker/24hr", {"symbol":symbol})
     raw = api("/api/v3/klines", {"symbol":symbol,"interval":interval,"limit":100})
+    depth = api("/api/v3/depth", {"symbol":symbol,"limit":10})
     candles = [{"open":float(k[1]),"high":float(k[2]),"low":float(k[3]),"close":float(k[4]),"volume":float(k[5]),"open_time":int(k[0]),"time":datetime.fromtimestamp(k[0]/1000, timezone.utc).strftime("%m-%d %H:%M")} for k in raw]
-    return ticker, candles
+    return ticker, candles, depth
 
 
 class CandleChart(Widget):
@@ -292,11 +293,13 @@ class CryptoBotApp(App):
         self.marker_legend.height = dp(34)
         body.add_widget(self.marker_legend)
         self.day = self.info("24h change: -- | 24h volume: --")
+        self.orderbook = self.info("ORDER BOOK  |  BID: loading...  |  ASK: loading...")
+        self.orderbook.height = dp(62)
         self.signal = self.info("SIGNAL: WAIT")
         self.score = self.info("BUY CONFIDENCE: --")
         self.indicators = self.info("RSI: -- | EMA20: -- | EMA50: --")
         self.checks = self.info("Technical confirmations will appear here.")
-        for widget in (self.price,self.day,self.signal,self.score,self.indicators,self.checks): body.add_widget(widget)
+        for widget in (self.price,self.day,self.signal,self.score,self.indicators,self.checks,self.orderbook): body.add_widget(widget)
         body.add_widget(self.heading("MEME COIN EARLY PUMP SCANNER"))
         scan = Button(text="🚀 SCAN BINANCE SPOT COINS NOW", size_hint_y=None, height=dp(50), background_normal="", background_color=(0.68,0.12,0.88,1), color=(1,1,1,1), bold=True)
         scan.bind(on_release=lambda *_: self.start_scan()); body.add_widget(scan)
@@ -379,9 +382,9 @@ class CryptoBotApp(App):
 
     def market_worker(self,symbol,interval,score_threshold,request_id):
         try:
-            ticker,candles = market_data(symbol,interval)
+            ticker,candles,depth = market_data(symbol,interval)
             result = analyze_buy_signal(candles,score_threshold)
-            Clock.schedule_once(lambda dt:self.show_market(symbol,interval,ticker,result,candles,request_id),0)
+            Clock.schedule_once(lambda dt:self.show_market(symbol,interval,ticker,result,candles,depth,request_id),0)
         except Exception as exc:
             message=str(exc)[:150]
             Clock.schedule_once(lambda dt:self.market_error(message,request_id),0)
@@ -392,7 +395,7 @@ class CryptoBotApp(App):
         self.price.text="Binance connection error: "+message
         self.signal.text="SIGNAL: WAIT - refresh when connected"
 
-    def show_market(self,symbol,interval,ticker,result,candles,request_id):
+    def show_market(self,symbol,interval,ticker,result,candles,depth,request_id):
         if request_id != self.market_request_id: return
         self.busy=False
         price=float(ticker.get("lastPrice",0))
@@ -401,6 +404,10 @@ class CryptoBotApp(App):
         self.price.text="[b]{} / {}[/b]     [b]{}[/b]   [color={}]{}{:+.2f}%[/color]".format(symbol[:-4],symbol[-4:],format(price,".8g"),"20E070" if change>=0 else "FF4D6D","" if change>=0 else "",change)
         high=float(ticker.get("highPrice",0)); low=float(ticker.get("lowPrice",0)); base_volume=float(ticker.get("volume",0))
         self.day.text="24h HIGH: {}   LOW: {}\n24h CHANGE: {:+.2f}%   VOL: {:,.3g} {} / {:,.3g} USDT".format(format(high,".8g"),format(low,".8g"),change,base_volume,symbol.replace("USDT",""),volume)
+        bids=depth.get("bids",[])[:5]; asks=depth.get("asks",[])[:5]
+        bid_text="  ".join("{} ({})".format(format(float(x[0]),".8g"),format(float(x[1]),".5g")) for x in bids[:3]) or "--"
+        ask_text="  ".join("{} ({})".format(format(float(x[0]),".8g"),format(float(x[1]),".5g")) for x in asks[:3]) or "--"
+        self.orderbook.text="[b][color=20E070]BID[/color][/b] {}\n[b][color=FF4D6D]ASK[/color][/b] {}".format(bid_text,ask_text)
         ind=result.get("indicators",{})
         self.chart.set_data(candles,ind)
         decision=result.get("decision","WAIT")
