@@ -518,8 +518,18 @@ class CryptoBotApp(App):
         resistance_text = " | ".join(format(x,".8g") for x in resistances) if resistances else "Not enough swing highs"
         self.sr_detail.text = "[b][color=45D9F5]SUPPORT ({})[/color][/b]: {}\\n[b][color=FFAD55]RESISTANCE ({})[/color][/b]: {}".format(interval.upper(),support_text,interval.upper(),resistance_text)
         decision=result.get("decision","WAIT")
-        if decision=="WAIT" and ind and ind.get("price",0)<ind.get("ema20",0)<ind.get("ema50",0) and ind.get("rsi14",50)<45:
-            decision="SELL / EXIT WARNING"
+        # Do not show an exit warning just because lagging EMAs remain bearish
+        # during a rebound. Confirm it with the most recently CLOSED red candle.
+        last_closed_bearish = (
+            len(candles) > 2
+            and float(candles[-2]["close"]) < float(candles[-2]["open"])
+            and float(candles[-2]["close"]) < float(candles[-3]["close"])
+        )
+        if (decision == "WAIT" and ind
+                and ind.get("price", 0) < ind.get("ema20", 0) < ind.get("ema50", 0)
+                and ind.get("rsi14", 50) < 45
+                and last_closed_bearish):
+            decision = "SELL / EXIT WARNING"
         signal_color = "20E070" if decision == "BUY" else ("FF4D6D" if "SELL" in decision else "FFD21F")
         self.signal.text="[b][color={}]SIGNAL: {}[/color][/b]".format(signal_color, decision)
         self.score.text="[b][color=54D6FF]BUY CONFIDENCE: {}% | Required: {}%[/color][/b]".format(result.get("score",0),self.minimum_buy_score)
