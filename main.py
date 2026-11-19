@@ -277,6 +277,7 @@ class CryptoBotApp(App):
         self.market_request_id = 0
         self.scan_running = False
         self.pairs_loading = False
+        self.last_alert_symbols = set()
         self.interval = "1h"
         root = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(6))
         root.add_widget(Label(text="[b][color=FFD21F]◆ CRYPTO BOT PRO[/color][/b]\n[color=65C7FF]BINANCE SPOT LIVE DASHBOARD[/color]", markup=True, font_size="21sp", size_hint_y=None, height=dp(68), color=(1,1,1,1)))
@@ -326,14 +327,18 @@ class CryptoBotApp(App):
         body.add_widget(self.heading("MEME COIN EARLY PUMP SCANNER"))
         scan = Button(text="🚀 SCAN BINANCE SPOT COINS NOW", size_hint_y=None, height=dp(50), background_normal="", background_color=(0.68,0.12,0.88,1), color=(1,1,1,1), bold=True)
         scan.bind(on_release=lambda *_: self.start_scan()); body.add_widget(scan)
-        self.scan_status = self.info("Scanner ready. Tap to scan live 5-minute market activity.")
-        self.scan_results = self.info("Pump alerts will appear here.")
-        body.add_widget(self.scan_status); body.add_widget(self.scan_results)
+        self.scan_status = self.info("Auto scanner starting: 60 liquid USDT pairs, 5-minute volume radar.")
+        self.scan_alerts = self.info("[b][color=FFD21F]EARLY PUMP ALERT: waiting for unusual volume...[/color][/b]")
+        self.scan_results = self.info("Pump radar results will appear here.")
+        body.add_widget(self.scan_status); body.add_widget(self.scan_alerts); body.add_widget(self.scan_results)
         body.add_widget(self.info("Binance public market data only. BUY/SELL/WAIT are analysis signals; this app does not place orders."))
         Clock.schedule_once(lambda dt: self.refresh_market(), 0.5)
         Clock.schedule_once(lambda dt: self.load_all_pairs(), 1.0)
         # Keep the selected market view fresh without requiring manual taps.
         Clock.schedule_interval(lambda dt: self.refresh_market(), 60)
+        # Automatically scan the market on startup and repeat every 60 seconds.
+        Clock.schedule_once(lambda dt: self.start_scan(), 8)
+        Clock.schedule_interval(lambda dt: self.start_scan(), 60)
         return root
 
 
@@ -473,7 +478,16 @@ class CryptoBotApp(App):
     def show_scan(self,results):
         self.scan_running=False
         alerts=[x for x in results if x.get("alert")]
-        self.scan_status.text="[b][color=20E070]SCAN COMPLETE: {} pairs checked | {} early alerts[/color][/b]".format(len(results),len(alerts))
+        self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs checked | {} early alerts[/color][/b]".format(len(results),len(alerts))
+        if alerts:
+            self.last_alert_symbols = {x.get("symbol") for x in alerts}
+            alert_lines=[]
+            for item in alerts[:8]:
+                alert_lines.append("[color=20E070]🚀 {}  |  {}% score[/color]  |  Vol {:.2f}x  |  Buy {:.1f}%  |  5m {:+.2f}%".format(item.get("symbol","?"),item.get("score",0),item.get("volume_ratio",0),item.get("buy_ratio",0),item.get("price_change",0)))
+            self.scan_alerts.text="[b][color=FFD21F]⚡ EARLY PUMP ALERT — LIVE[/color][/b]\n"+"\n".join(alert_lines)+"\n[color=DBEAFE]Check the chart before entry; alert is not a guaranteed BUY.[/color]"
+        else:
+            self.last_alert_symbols = set()
+            self.scan_alerts.text="[b][color=FFD21F]EARLY PUMP ALERT: none right now[/color][/b] — monitoring volume every 60 seconds."
         if not results:
             self.scan_results.text="No eligible USDT pairs returned."; return
         rows=[]
