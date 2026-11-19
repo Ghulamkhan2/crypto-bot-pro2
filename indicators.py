@@ -106,7 +106,7 @@ def analyze_buy_signal(candles, minimum_score=80):
 
 
 def candle_trade_markers(candles, minimum_score=80):
-    """Historical confirmation markers: green BUY below, red SELL above."""
+    """Historical signals. SELL requires an actual bearish candle and falling momentum."""
     markers = []
     if not candles or len(candles) < 60:
         return markers
@@ -115,8 +115,11 @@ def candle_trade_markers(candles, minimum_score=80):
     for end in range(60, len(candles) + 1):
         cs = closes[:end]
         vs = volumes[:end]
+        current = candles[end - 1]
+        previous = candles[end - 2]
         e20, e50 = _ema(cs, 20), _ema(cs, 50)
         rsi = _rsi(cs, 14)
+        previous_rsi = _rsi(cs[:-1], 14)
         fast = _ema(cs, 12)
         slow = _ema(cs, 26)
         macd_series = []
@@ -131,12 +134,21 @@ def candle_trade_markers(candles, minimum_score=80):
             e20 > e50, cs[-1] > e20, 50 <= rsi <= 68,
             macd_signal is not None and macd > macd_signal, vol_ok
         )
+        # A bearish SELL marker is not allowed on a green/reversal candle.
+        # Require a red candle, a lower close, and RSI that is still falling.
         bearish = (
-            e20 < e50, cs[-1] < e20, rsi < 50,
-            macd_signal is not None and macd < macd_signal, vol_ok
+            e20 < e50,
+            cs[-1] < e20,
+            rsi < 50 and previous_rsi is not None and rsi <= previous_rsi,
+            macd_signal is not None and macd < macd_signal,
+            vol_ok
+        )
+        bearish_candle_confirmed = (
+            float(current["close"]) < float(current["open"])
+            and float(current["close"]) < float(previous["close"])
         )
         if sum(bullish) >= minimum_score // 20:
-            markers.append({"index": end-1, "side": "BUY"})
-        elif sum(bearish) >= minimum_score // 20:
-            markers.append({"index": end-1, "side": "SELL"})
+            markers.append({"index": end - 1, "side": "BUY"})
+        elif bearish_candle_confirmed and sum(bearish) >= minimum_score // 20:
+            markers.append({"index": end - 1, "side": "SELL"})
     return markers
