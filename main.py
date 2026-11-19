@@ -481,27 +481,27 @@ class CryptoBotApp(App):
     def show_scan(self,results):
         self.scan_running=False
         alerts=[x for x in results if x.get("alert")]
-        self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs checked | {} early alerts[/color][/b]".format(len(results),len(alerts))
+        self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs checked | {} confirmed early alerts[/color][/b]".format(len(results),len(alerts))
         if alerts:
             self.last_alert_symbols = {x.get("symbol") for x in alerts}
             alert_lines=[]
             for item in alerts[:8]:
-                alert_lines.append("[color=20E070]🚀 {} | 5m VOL: {:,.0f} USDT | {:.2f}x avg | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("buy_ratio",0)))
-            alert_text="[b][color=FFD21F]⚡ EARLY PUMP ALERT — LIVE[/color][/b]\\n"+"\\n".join(alert_lines)
+                alert_lines.append("[color=20E070]🚀 {} | CLOSED 5m VOL: {:,.0f} USDT | {:.2f}x avg | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("buy_ratio",0)))
+            alert_text="[b][color=FFD21F]⚡ CONFIRMED EARLY PUMP ALERT[/color][/b]\n"+"\n".join(alert_lines)
             self.top_pump_alert.text=alert_text
             self.top_pump_alert.height=dp(max(76, 28 + 22*min(len(alerts),8)))
-            self.scan_alerts.text=alert_text+"\\n[color=DBEAFE]Check the chart before entry; alert is not a guaranteed BUY.[/color]"
+            self.scan_alerts.text=alert_text+"\n[color=DBEAFE]Closed-candle volume filters passed. Alert is not a guaranteed BUY.[/color]"
         else:
             self.last_alert_symbols = set()
-            idle="[b][color=FFD21F]⚡ EARLY PUMP RADAR[/color][/b]  |  No unusual volume alert right now. Auto-scanning every 60 seconds."
+            idle="[b][color=FFD21F]⚡ EARLY PUMP RADAR[/color][/b]\nNo qualified alert. Requires closed 5m volume >= 5,000 USDT, >= 2.5x average, buyers >= 60%, and price +0.3% to +3.0%."
             self.top_pump_alert.text=idle
-            self.top_pump_alert.height=dp(76)
-            self.scan_alerts.text="[b][color=FFD21F]EARLY PUMP ALERT: none right now[/color][/b] — monitoring volume every 60 seconds."
+            self.top_pump_alert.height=dp(90)
+            self.scan_alerts.text="[b][color=FFD21F]NO CONFIRMED EARLY PUMP ALERT[/color][/b]\nLow-volume or incomplete candles are filtered out."
         if not results:
             self.scan_results.text="No eligible USDT pairs returned."; return
         rows=[]
         for item in results[:15]:
-            rows.append("{} | {} | Score {}%\n5m volume {:.2f}x | price {:+.2f}% | buyers {:.1f}%".format(item.get("symbol","?"),"EARLY ALERT" if item.get("alert") else "WAIT",item.get("score",0),item.get("volume_ratio",0),item.get("price_change",0),item.get("buy_ratio",0)))
+            rows.append("{} | {} | Score {}%\n5m closed volume {:,.0f} USDT | {:.2f}x | price {:+.2f}% | buyers {:.1f}%".format(item.get("symbol","?"),"EARLY ALERT" if item.get("alert") else "WAIT",item.get("score",0),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("price_change",0),item.get("buy_ratio",0)))
         self.scan_results.text="\n\n".join(rows)
 
 CryptoBotApp().run()
