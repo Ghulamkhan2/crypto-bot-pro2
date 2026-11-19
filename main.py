@@ -286,6 +286,9 @@ class CryptoBotApp(App):
         body.bind(minimum_height=body.setter("height"))
         scroll.add_widget(body)
         root.add_widget(scroll)
+        self.top_pump_alert = self.info("[b][color=FFD21F]⚡ EARLY PUMP RADAR[/color][/b]  |  Waiting for unusual volume...")
+        self.top_pump_alert.height = dp(76)
+        body.add_widget(self.top_pump_alert)
         body.add_widget(self.heading("SELECT BINANCE USDT COIN"))
         self.pair = Spinner(text="BTCUSDT", values=tuple(PAIRS), size_hint_y=None, height=dp(48), background_color=(0.95,0.68,0.05,1), color=(0.03,0.04,0.08,1))
         self.pair.bind(text=lambda *_: self.refresh_market())
@@ -483,10 +486,16 @@ class CryptoBotApp(App):
             self.last_alert_symbols = {x.get("symbol") for x in alerts}
             alert_lines=[]
             for item in alerts[:8]:
-                alert_lines.append("[color=20E070]🚀 {}  |  {}% score[/color]  |  Vol {:.2f}x  |  Buy {:.1f}%  |  5m {:+.2f}%".format(item.get("symbol","?"),item.get("score",0),item.get("volume_ratio",0),item.get("buy_ratio",0),item.get("price_change",0)))
-            self.scan_alerts.text="[b][color=FFD21F]⚡ EARLY PUMP ALERT — LIVE[/color][/b]\n"+"\n".join(alert_lines)+"\n[color=DBEAFE]Check the chart before entry; alert is not a guaranteed BUY.[/color]"
+                alert_lines.append("[color=20E070]🚀 {} | 5m VOL: {:,.0f} USDT | {:.2f}x avg | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("buy_ratio",0)))
+            alert_text="[b][color=FFD21F]⚡ EARLY PUMP ALERT — LIVE[/color][/b]\\n"+"\\n".join(alert_lines)
+            self.top_pump_alert.text=alert_text
+            self.top_pump_alert.height=dp(max(76, 28 + 22*min(len(alerts),8)))
+            self.scan_alerts.text=alert_text+"\\n[color=DBEAFE]Check the chart before entry; alert is not a guaranteed BUY.[/color]"
         else:
             self.last_alert_symbols = set()
+            idle="[b][color=FFD21F]⚡ EARLY PUMP RADAR[/color][/b]  |  No unusual volume alert right now. Auto-scanning every 60 seconds."
+            self.top_pump_alert.text=idle
+            self.top_pump_alert.height=dp(76)
             self.scan_alerts.text="[b][color=FFD21F]EARLY PUMP ALERT: none right now[/color][/b] — monitoring volume every 60 seconds."
         if not results:
             self.scan_results.text="No eligible USDT pairs returned."; return
