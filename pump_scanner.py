@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 MIN_QUOTE_VOLUME = 50000.0
+MIN_5M_QUOTE_VOLUME = 5000.0
 MAX_MARKETS = 60
 ALERT_SCORE = 60
 MAX_WORKERS = 8
@@ -34,16 +35,18 @@ def _get_json(path, params=None, timeout=7):
 
 
 def score_early_pump(klines):
+    # Ignore the currently-forming 5-minute candle; use only fully closed candles.
     if not klines or len(klines) < 22:
         return {"score": 0, "alert": False, "signals": [],
-                "reason": "Not enough 5-minute candles"}
+                "reason": "Not enough closed 5-minute candles"}
     try:
+        closed = klines[:-1]
         candles = [{
             "open": float(k[1]), "high": float(k[2]),
             "low": float(k[3]), "close": float(k[4]),
             "quote": float(k[7]), "buy_quote": float(k[10]),
-        } for k in klines[-22:]]
-        if any(c["close"] <= 0 or c["quote"] < 0 for c in candles):
+        } for k in closed[-21:]]
+        if len(candles) < 21 or any(c["close"] <= 0 or c["quote"] < 0 for c in candles):
             raise ValueError("invalid values")
     except (IndexError, TypeError, ValueError):
         return {"score": 0, "alert": False, "signals": [],
@@ -58,23 +61,26 @@ def score_early_pump(klines):
     candle_range = last["high"] - last["low"]
     close_position = ((last["close"] - last["low"]) / candle_range
                       if candle_range > 0 else 0)
+
+    # Hard gates prevent tiny-volume coins and weak/late moves from creating alerts.
     checks = [
-        (volume_ratio >= 2.0, "5m volume surge >= 2x"),
-        (0.3 <= price_change <= 4.0, "5m price rising 0.3%-4%"),
-        (buy_ratio >= 0.55, "Aggressive buying >= 55%"),
-        (close_position >= 0.70, "Candle closes near its high"),
+        (last["quote"] >= MIN_5M_QUOTE_VOLUME and volume_ratio >= 2.5,
+         "5m quote volume >= 5,000 USDT and >= 2.5x average"),
+        (0.3 <= price_change <= 3.0, "5m price rising 0.3%-3.0%"),
+        (buy_ratio >= 0.60, "Aggressive buying >= 60%"),
+        (close_position >= 0.70, "Closed candle finishes in top 30% of range"),
     ]
     score = sum(25 for passed, _ in checks if passed)
+    all_passed = all(passed for passed, _ in checks)
     return {
-        "score": score, "alert": score >= ALERT_SCORE,
+        "score": score, "alert": all_passed,
         "signals": [name for passed, name in checks if passed],
         "volume_ratio": round(volume_ratio, 2),
         "volume_5m_usdt": round(last["quote"], 2),
         "price_change": round(price_change, 2),
         "buy_ratio": round(buy_ratio * 100, 1),
-        "reason": "Early momentum conditions detected" if score >= ALERT_SCORE else "No early-pump alert",
+        "reason": "All early-momentum filters passed on a closed candle" if all_passed else "Filtered: " + ", ".join(name for passed, name in checks if not passed),
     }
-
 
 def _scan_one(symbol, quote_volume, day_change):
     klines = _get_json("/api/v3/klines", {
