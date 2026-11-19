@@ -12,8 +12,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 MIN_QUOTE_VOLUME = 50000.0
-MIN_5M_QUOTE_VOLUME = 5000.0
+MIN_5M_QUOTE_VOLUME = 10000.0
 MAX_MARKETS = 60
+MAX_24H_CHANGE_FOR_ALERT = 5.0
 ALERT_SCORE = 60
 MAX_WORKERS = 8
 
@@ -51,7 +52,7 @@ def score_early_pump(klines):
     live_change=(live["close"]/live["open"]-1)*100
     live_range=live["high"]-live["low"]
     live_close_pos=(live["close"]-live["low"])/live_range if live_range>0 else 0
-    watch=(live["quote"]>=MIN_5M_QUOTE_VOLUME and live_ratio>=2.0 and live_buy>=0.60 and 0.0<=live_change<=1.5 and live_close_pos>=0.55)
+    watch=(live["quote"]>=MIN_5M_QUOTE_VOLUME and live_ratio>=3.0 and live_buy>=0.65 and 0.0<=live_change<=1.2 and live_close_pos>=0.65)
     last=closed[-1]; previous=closed[-21:-1]
     avg_closed=sum(c["quote"] for c in previous)/len(previous) if previous else 0
     volume_ratio=last["quote"]/avg_closed if avg_closed else 0
@@ -60,10 +61,10 @@ def score_early_pump(klines):
     candle_range=last["high"]-last["low"]
     close_position=(last["close"]-last["low"])/candle_range if candle_range>0 else 0
     checks=[
-        (last["quote"]>=MIN_5M_QUOTE_VOLUME and volume_ratio>=2.5,"Closed 5m volume >= 5,000 USDT and >= 2.5x average"),
-        (0.3<=price_change<=3.0,"Closed 5m price rising 0.3%-3.0%"),
-        (buy_ratio>=0.60,"Aggressive buying >= 60%"),
-        (close_position>=0.70,"Closed candle finishes in top 30% of range"),
+        (last["quote"]>=MIN_5M_QUOTE_VOLUME and volume_ratio>=3.0,"Closed 5m volume >= 10,000 USDT and >= 3.0x average"),
+        (0.2<=price_change<=2.0,"Closed 5m price rising 0.2%-2.0%"),
+        (buy_ratio>=0.65,"Aggressive buying >= 65%"),
+        (close_position>=0.75,"Closed candle finishes in top 25% of range"),
     ]
     score=sum(25 for passed,_ in checks if passed); confirmed=all(passed for passed,_ in checks)
     return {
@@ -74,6 +75,7 @@ def score_early_pump(klines):
         "watch_volume_ratio":round(live_ratio,2),"watch_volume_5m_usdt":round(live["quote"],2),
         "watch_buy_ratio":round(live_buy*100,1),"watch_price_change":round(live_change,2),
         "reason":"Confirmed on closed 5m candle" if confirmed else ("Live 5m early watch only" if watch else "No qualified early watch or confirmed setup"),
+        "max_24h_change_for_alert": MAX_24H_CHANGE_FOR_ALERT,
     }
 
 def _scan_one(symbol, quote_volume, day_change):
@@ -109,7 +111,7 @@ def scan_binance_spot(on_progress=None):
             day_change = float(item.get("priceChangePercent", 0))
         except (TypeError, ValueError):
             continue
-        if quote_volume >= MIN_QUOTE_VOLUME and day_change < 35:
+        if quote_volume >= MIN_QUOTE_VOLUME and day_change <= MAX_24H_CHANGE_FOR_ALERT:
             candidates.append((quote_volume, symbol, day_change))
     candidates.sort(reverse=True)
     selected = candidates[:MAX_MARKETS]
