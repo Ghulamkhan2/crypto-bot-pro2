@@ -35,51 +35,45 @@ def _get_json(path, params=None, timeout=7):
 
 
 def score_early_pump(klines):
-    # Ignore the currently-forming 5-minute candle; use only fully closed candles.
+    # Live candle creates an EARLY WATCH; closed candles create confirmation.
     if not klines or len(klines) < 22:
-        return {"score": 0, "alert": False, "signals": [],
-                "reason": "Not enough closed 5-minute candles"}
+        return {"score": 0, "alert": False, "watch": False, "signals": [], "reason": "Not enough 5-minute candles"}
     try:
-        closed = klines[:-1]
-        candles = [{
-            "open": float(k[1]), "high": float(k[2]),
-            "low": float(k[3]), "close": float(k[4]),
-            "quote": float(k[7]), "buy_quote": float(k[10]),
-        } for k in closed[-21:]]
-        if len(candles) < 21 or any(c["close"] <= 0 or c["quote"] < 0 for c in candles):
-            raise ValueError("invalid values")
-    except (IndexError, TypeError, ValueError):
-        return {"score": 0, "alert": False, "signals": [],
-                "reason": "Invalid market data"}
-
-    last = candles[-1]
-    previous = candles[-21:-1]
-    avg_quote = sum(c["quote"] for c in previous) / len(previous)
-    volume_ratio = last["quote"] / avg_quote if avg_quote else 0
-    price_change = (last["close"] / last["open"] - 1) * 100
-    buy_ratio = last["buy_quote"] / last["quote"] if last["quote"] else 0
-    candle_range = last["high"] - last["low"]
-    close_position = ((last["close"] - last["low"]) / candle_range
-                      if candle_range > 0 else 0)
-
-    # Hard gates prevent tiny-volume coins and weak/late moves from creating alerts.
-    checks = [
-        (last["quote"] >= MIN_5M_QUOTE_VOLUME and volume_ratio >= 2.5,
-         "5m quote volume >= 5,000 USDT and >= 2.5x average"),
-        (0.3 <= price_change <= 3.0, "5m price rising 0.3%-3.0%"),
-        (buy_ratio >= 0.60, "Aggressive buying >= 60%"),
-        (close_position >= 0.70, "Closed candle finishes in top 30% of range"),
+        closed = [{"open":float(k[1]),"high":float(k[2]),"low":float(k[3]),"close":float(k[4]),"quote":float(k[7]),"buy_quote":float(k[10])} for k in klines[:-1][-21:]]
+        k=klines[-1]
+        live={"open":float(k[1]),"high":float(k[2]),"low":float(k[3]),"close":float(k[4]),"quote":float(k[7]),"buy_quote":float(k[10])}
+        if len(closed)<21 or any(c["close"]<=0 or c["quote"]<0 for c in closed) or live["close"]<=0: raise ValueError("invalid values")
+    except (IndexError,TypeError,ValueError):
+        return {"score":0,"alert":False,"watch":False,"signals":[],"reason":"Invalid market data"}
+    avg_live=sum(c["quote"] for c in closed[-20:])/20
+    live_ratio=live["quote"]/avg_live if avg_live else 0
+    live_buy=live["buy_quote"]/live["quote"] if live["quote"] else 0
+    live_change=(live["close"]/live["open"]-1)*100
+    live_range=live["high"]-live["low"]
+    live_close_pos=(live["close"]-live["low"])/live_range if live_range>0 else 0
+    watch=(live["quote"]>=MIN_5M_QUOTE_VOLUME and live_ratio>=2.0 and live_buy>=0.60 and 0.0<=live_change<=1.5 and live_close_pos>=0.55)
+    last=closed[-1]; previous=closed[-21:-1]
+    avg_closed=sum(c["quote"] for c in previous)/len(previous) if previous else 0
+    volume_ratio=last["quote"]/avg_closed if avg_closed else 0
+    price_change=(last["close"]/last["open"]-1)*100
+    buy_ratio=last["buy_quote"]/last["quote"] if last["quote"] else 0
+    candle_range=last["high"]-last["low"]
+    close_position=(last["close"]-last["low"])/candle_range if candle_range>0 else 0
+    checks=[
+        (last["quote"]>=MIN_5M_QUOTE_VOLUME and volume_ratio>=2.5,"Closed 5m volume >= 5,000 USDT and >= 2.5x average"),
+        (0.3<=price_change<=3.0,"Closed 5m price rising 0.3%-3.0%"),
+        (buy_ratio>=0.60,"Aggressive buying >= 60%"),
+        (close_position>=0.70,"Closed candle finishes in top 30% of range"),
     ]
-    score = sum(25 for passed, _ in checks if passed)
-    all_passed = all(passed for passed, _ in checks)
+    score=sum(25 for passed,_ in checks if passed); confirmed=all(passed for passed,_ in checks)
     return {
-        "score": score, "alert": all_passed,
-        "signals": [name for passed, name in checks if passed],
-        "volume_ratio": round(volume_ratio, 2),
-        "volume_5m_usdt": round(last["quote"], 2),
-        "price_change": round(price_change, 2),
-        "buy_ratio": round(buy_ratio * 100, 1),
-        "reason": "All early-momentum filters passed on a closed candle" if all_passed else "Filtered: " + ", ".join(name for passed, name in checks if not passed),
+        "score":score,"alert":confirmed,"watch":watch and not confirmed,
+        "signals":[name for passed,name in checks if passed],
+        "volume_ratio":round(volume_ratio,2),"volume_5m_usdt":round(last["quote"],2),
+        "price_change":round(price_change,2),"buy_ratio":round(buy_ratio*100,1),
+        "watch_volume_ratio":round(live_ratio,2),"watch_volume_5m_usdt":round(live["quote"],2),
+        "watch_buy_ratio":round(live_buy*100,1),"watch_price_change":round(live_change,2),
+        "reason":"Confirmed on closed 5m candle" if confirmed else ("Live 5m early watch only" if watch else "No qualified early watch or confirmed setup"),
     }
 
 def _scan_one(symbol, quote_volume, day_change):
