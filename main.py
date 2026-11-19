@@ -480,28 +480,35 @@ class CryptoBotApp(App):
 
     def show_scan(self,results):
         self.scan_running=False
-        alerts=[x for x in results if x.get("alert")]
-        self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs checked | {} confirmed early alerts[/color][/b]".format(len(results),len(alerts))
-        if alerts:
-            self.last_alert_symbols = {x.get("symbol") for x in alerts}
-            alert_lines=[]
-            for item in alerts[:8]:
-                alert_lines.append("[color=20E070]🚀 {} | CLOSED 5m VOL: {:,.0f} USDT | {:.2f}x avg | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("buy_ratio",0)))
-            alert_text="[b][color=FFD21F]⚡ CONFIRMED EARLY PUMP ALERT[/color][/b]\n"+"\n".join(alert_lines)
+        # Defense in depth: enforce every threshold again before displaying confirmation.
+        alerts=[x for x in results if x.get("alert") and x.get("volume_5m_usdt",0)>=5000 and x.get("volume_ratio",0)>=2.5 and x.get("buy_ratio",0)>=60 and 0.3<=x.get("price_change",0)<=3.0]
+        watches=[x for x in results if x.get("watch") and x.get("watch_volume_5m_usdt",0)>=5000 and x.get("watch_volume_ratio",0)>=2.0 and x.get("watch_buy_ratio",0)>=60]
+        self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs | {} confirmed | {} early watches[/color][/b]".format(len(results),len(alerts),len(watches))
+        display=[]
+        for item in alerts[:4]:
+            display.append("[color=20E070]✓ CONFIRMED {} | CLOSED 5m VOL {:,.0f} USDT | {:.2f}x | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("buy_ratio",0)))
+        for item in watches[:6]:
+            display.append("[color=FFD21F]◷ EARLY WATCH {} | LIVE 5m VOL {:,.0f} USDT | {:.2f}x | BUY {:.1f}%[/color]".format(item.get("symbol","?"),item.get("watch_volume_5m_usdt",0),item.get("watch_volume_ratio",0),item.get("watch_buy_ratio",0)))
+        if display:
+            note="\n[color=FFB84D]Chart currently: {}. Select the alert coin to view its matching chart.[/color]".format(self.pair.text)
+            alert_text="[b][color=FFD21F]⚡ PUMP RADAR — LIVE[/color][/b]\n"+"\n".join(display)+note
             self.top_pump_alert.text=alert_text
-            self.top_pump_alert.height=dp(max(76, 28 + 22*min(len(alerts),8)))
-            self.scan_alerts.text=alert_text+"\n[color=DBEAFE]Closed-candle volume filters passed. Alert is not a guaranteed BUY.[/color]"
+            self.top_pump_alert.height=dp(max(100,30+23*len(display)))
+            self.scan_alerts.text=alert_text+"\n[color=DBEAFE]EARLY WATCH is not a BUY order. Confirmed means filters passed, not guaranteed profit.[/color]"
         else:
-            self.last_alert_symbols = set()
-            idle="[b][color=FFD21F]⚡ EARLY PUMP RADAR[/color][/b]\nNo qualified alert. Requires closed 5m volume >= 5,000 USDT, >= 2.5x average, buyers >= 60%, and price +0.3% to +3.0%."
+            idle="[b][color=FFD21F]⚡ PUMP RADAR[/color][/b]\nNo qualified early watch or confirmed setup. Early watch: live 5m volume >=5,000 USDT and >=2.0x average, buyers >=60%, price 0%-1.5%. Confirmation: closed 5m volume >=5,000 USDT and >=2.5x average, buyers >=60%, price +0.3%-3.0%."
             self.top_pump_alert.text=idle
-            self.top_pump_alert.height=dp(90)
-            self.scan_alerts.text="[b][color=FFD21F]NO CONFIRMED EARLY PUMP ALERT[/color][/b]\nLow-volume or incomplete candles are filtered out."
+            self.top_pump_alert.height=dp(110)
+            self.scan_alerts.text="[b][color=FFD21F]NO QUALIFIED PUMP RADAR SIGNAL[/color][/b]\nLow-volume and weak-buying candidates are hidden."
         if not results:
             self.scan_results.text="No eligible USDT pairs returned."; return
         rows=[]
         for item in results[:15]:
-            rows.append("{} | {} | Score {}%\n5m closed volume {:,.0f} USDT | {:.2f}x | price {:+.2f}% | buyers {:.1f}%".format(item.get("symbol","?"),"EARLY ALERT" if item.get("alert") else "WAIT",item.get("score",0),item.get("volume_5m_usdt",0),item.get("volume_ratio",0),item.get("price_change",0),item.get("buy_ratio",0)))
+            status="CONFIRMED" if item.get("alert") else ("EARLY WATCH" if item.get("watch") else "WAIT")
+            vol=item.get("watch_volume_5m_usdt",0) if item.get("watch") else item.get("volume_5m_usdt",0)
+            ratio=item.get("watch_volume_ratio",0) if item.get("watch") else item.get("volume_ratio",0)
+            buy=item.get("watch_buy_ratio",0) if item.get("watch") else item.get("buy_ratio",0)
+            rows.append("{} | {}\n5m volume {:,.0f} USDT | {:.2f}x | buyers {:.1f}%".format(item.get("symbol","?"),status,vol,ratio,buy))
         self.scan_results.text="\n\n".join(rows)
 
 CryptoBotApp().run()
