@@ -12,9 +12,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 BASES = ("https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com", "https://api3.binance.com")
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 MIN_QUOTE_VOLUME = 50000.0
-MAX_MARKETS = 40
+MAX_MARKETS = 60
 ALERT_SCORE = 60
-MAX_WORKERS = 5
+MAX_WORKERS = 8
 
 
 def _get_json(path, params=None, timeout=7):
