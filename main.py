@@ -557,8 +557,8 @@ class CryptoBotApp(App):
     def show_scan(self,results):
         self.scan_running=False
         # Defense in depth: enforce every threshold again before displaying confirmation.
-        alerts=[x for x in results if x.get("alert") and x.get("volume_5m_usdt",0)>=5000 and x.get("volume_ratio",0)>=2.5 and x.get("buy_ratio",0)>=60 and 0.3<=x.get("price_change",0)<=3.0]
-        watches=[x for x in results if x.get("watch") and x.get("watch_volume_5m_usdt",0)>=5000 and x.get("watch_volume_ratio",0)>=2.0 and x.get("watch_buy_ratio",0)>=60]
+        alerts=[x for x in results if x.get("alert") and x.get("volume_5m_usdt",0)>=10000 and x.get("volume_ratio",0)>=3.0 and x.get("buy_ratio",0)>=65 and 0.2<=x.get("price_change",0)<=2.0 and x.get("change_24h",999)<=5.0]
+        watches=[x for x in results if x.get("watch") and x.get("watch_volume_5m_usdt",0)>=10000 and x.get("watch_volume_ratio",0)>=3.0 and x.get("watch_buy_ratio",0)>=65 and x.get("change_24h",999)<=5.0]
         self.scan_status.text="[b][color=20E070]AUTO SCAN: {} pairs | {} confirmed | {} early watches[/color][/b]".format(len(results),len(alerts),len(watches))
         display=[]
         for item in alerts[:4]:
@@ -572,7 +572,7 @@ class CryptoBotApp(App):
             self.top_pump_alert.height=dp(max(100,30+23*len(display)))
             self.scan_alerts.text=alert_text+"\n[color=DBEAFE]EARLY WATCH is not a BUY order. Confirmed means filters passed, not guaranteed profit.[/color]"
         else:
-            idle="[b][color=FFD21F]⚡ PUMP RADAR[/color][/b]\nNo qualified early watch or confirmed setup. Early watch: live 5m volume >=5,000 USDT and >=2.0x average, buyers >=60%, price 0%-1.5%. Confirmation: closed 5m volume >=5,000 USDT and >=2.5x average, buyers >=60%, price +0.3%-3.0%."
+            idle="[b][color=FFD21F]⚡ PUMP RADAR[/color][/b]\nNo qualified early watch or confirmed setup. Early watch: 24h change <=5%, live 5m volume >=10,000 USDT and >=3.0x average, buyers >=65%, candle +0%-1.2%. Confirmation: closed 5m volume >=10,000 USDT and >=3.0x average, buyers >=65%, candle +0.2%-2.0%."
             self.top_pump_alert.text=idle
             self.top_pump_alert.height=dp(110)
             self.scan_alerts.text="[b][color=FFD21F]NO QUALIFIED PUMP RADAR SIGNAL[/color][/b]\nLow-volume and weak-buying candidates are hidden."
