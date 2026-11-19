@@ -69,7 +69,8 @@ class CandleChart(Widget):
         closes = [c["close"] for c in self.data]
         self.ema20 = self._ema(closes, 20)
         self.ema50 = self._ema(closes, 50)
-        self.markers = candle_trade_markers(self.data, 80)
+        # Exclude the currently-forming candle: markers are confirmed only after candle close.
+        self.markers = candle_trade_markers(self.data[:-1], 80) if len(self.data) > 1 else []
         self.offset = 0
         self.selected_index = len(self.data)-1
         self._update_detail()
@@ -227,8 +228,30 @@ class CandleChart(Widget):
                 Line(points=[x,yval(c["low"]),x,yval(c["high"])],width=1.25)
                 y1,y2 = yval(c["open"]),yval(c["close"])
                 Rectangle(pos=(x-candle_w/2,min(y1,y2)),size=(candle_w,max(dp(2),abs(y2-y1))))
-            # Keep the candlestick area uncluttered; signals remain in the dashboard summary.
-            # EMA overlays are hidden on the main chart for a clean Binance-style candle view.
+            # Draw at most one confirmed signal marker per closed candle.
+            # BUY is a green upward arrow below the candle; SELL is a red downward arrow above it.
+            for marker in self.markers:
+                candle_index = marker.get("index", -1)
+                if candle_index < begin or candle_index >= end:
+                    continue
+                candle = self.data[candle_index]
+                x = left + (candle_index - begin + .5) * slot
+                marker_side = marker.get("side")
+                if marker_side == "BUY":
+                    Color(.02, .95, .35, 1)
+                    tip_y = max(bottom + vol_h + gap + dp(5), yval(candle["low"]) - dp(7))
+                    base_y = tip_y - dp(9)
+                    half_w = dp(5)
+                    Line(points=[x, tip_y, x-half_w, base_y, x+half_w, base_y], close=True, width=1.8)
+                    Line(points=[x, base_y-dp(2), x, base_y-dp(7)], width=1.8)
+                elif marker_side == "SELL":
+                    Color(1, .16, .25, 1)
+                    tip_y = min(top - dp(5), yval(candle["high"]) + dp(7))
+                    base_y = tip_y + dp(9)
+                    half_w = dp(5)
+                    Line(points=[x, tip_y, x-half_w, base_y, x+half_w, base_y], close=True, width=1.8)
+                    Line(points=[x, base_y+dp(2), x, base_y+dp(7)], width=1.8)
+            # EMA overlays remain hidden for a clean Binance-style candle view.
             last_price = candles[-1]["close"]
             previous_close = candles[-2]["close"] if len(candles) > 1 else candles[-1]["open"]
             price_delta = last_price - previous_close
