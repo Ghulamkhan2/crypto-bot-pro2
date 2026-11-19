@@ -69,6 +69,7 @@ def score_early_pump(klines):
         "score": score, "alert": score >= ALERT_SCORE,
         "signals": [name for passed, name in checks if passed],
         "volume_ratio": round(volume_ratio, 2),
+        "volume_5m_usdt": round(last["quote"], 2),
         "price_change": round(price_change, 2),
         "buy_ratio": round(buy_ratio * 100, 1),
         "reason": "Early momentum conditions detected" if score >= ALERT_SCORE else "No early-pump alert",
