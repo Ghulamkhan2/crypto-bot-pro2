@@ -54,6 +54,9 @@ class CandleChart(Widget):
         self.ema20 = []
         self.ema50 = []
         self.markers = []
+        self.support_levels = []
+        self.resistance_levels = []
+        self.sr_enabled = True
         self.zoom = 3.0
         self.offset = 0
         self._touches = {}
@@ -71,10 +74,41 @@ class CandleChart(Widget):
         self.ema50 = self._ema(closes, 50)
         # Exclude the currently-forming candle: markers are confirmed only after candle close.
         self.markers = candle_trade_markers(self.data[:-1], 80) if len(self.data) > 1 else []
+        self.support_levels, self.resistance_levels = self._find_support_resistance(self.data[:-1] if len(self.data) > 5 else self.data)
         self.offset = 0
         self.selected_index = len(self.data)-1
         self._update_detail()
         self.redraw()
+
+    @staticmethod
+    def _find_support_resistance(candles):
+        """Find clustered swing lows/highs from closed candles only."""
+        if len(candles) < 12:
+            return [], []
+        recent = candles[-100:]
+        lows, highs = [], []
+        for i in range(2, len(recent)-2):
+            low = float(recent[i]["low"])
+            high = float(recent[i]["high"])
+            if low <= min(float(recent[j]["low"]) for j in (i-2,i-1,i+1,i+2)):
+                lows.append(low)
+            if high >= max(float(recent[j]["high"]) for j in (i-2,i-1,i+1,i+2)):
+                highs.append(high)
+        price = float(recent[-1]["close"])
+        tolerance = max(price * 0.0025, 1e-8)
+        def cluster(values):
+            groups = []
+            for value in sorted(values):
+                if groups and abs(value - (sum(groups[-1])/len(groups[-1]))) <= tolerance:
+                    groups[-1].append(value)
+                else:
+                    groups.append([value])
+            return [sum(group)/len(group) for group in groups]
+        supports = [v for v in cluster(lows) if v < price]
+        resistances = [v for v in cluster(highs) if v > price]
+        supports = sorted(supports, reverse=True)[:2]
+        resistances = sorted(resistances)[:2]
+        return supports, resistances
 
     @staticmethod
     def _ema(values, period):
@@ -213,6 +247,26 @@ class CandleChart(Widget):
             for j in range(6):
                 xx = left + (right-left)*j/5
                 Line(points=[xx,bottom,xx,top],width=1)
+            # Draw nearest automatic support/resistance levels for the selected chart timeframe.
+            if self.sr_enabled:
+                for level_index, level in enumerate(self.support_levels):
+                    if lo <= level <= hi:
+                        yy = yval(level)
+                        Color(.08,.78,.92,.92)
+                        Line(points=[left,yy,right,yy],width=1.35,dash_length=dp(7),dash_offset=dp(4))
+                        tag = CoreLabel(text="S{} {}".format(level_index+1,format(level,".7g")),font_size=dp(9),bold=True,color=(.35,.92,1,1))
+                        tag.refresh()
+                        Color(.35,.92,1,1)
+                        Rectangle(texture=tag.texture,pos=(right-tag.texture.width-dp(2),yy+dp(2)),size=tag.texture.size)
+                for level_index, level in enumerate(self.resistance_levels):
+                    if lo <= level <= hi:
+                        yy = yval(level)
+                        Color(1,.52,.12,.92)
+                        Line(points=[left,yy,right,yy],width=1.35,dash_length=dp(7),dash_offset=dp(4))
+                        tag = CoreLabel(text="R{} {}".format(level_index+1,format(level,".7g")),font_size=dp(9),bold=True,color=(1,.70,.32,1))
+                        tag.refresh()
+                        Color(1,.70,.32,1)
+                        Rectangle(texture=tag.texture,pos=(right-tag.texture.width-dp(2),yy+dp(2)),size=tag.texture.size)
             for i,c in enumerate(candles):
                 x = left + (i+.5)*slot
                 green = c["close"] >= c["open"]
@@ -316,6 +370,16 @@ class CryptoBotApp(App):
         self.candle_detail.height = dp(68)
         self.chart.detail_label = self.candle_detail
         body.add_widget(self.candle_detail)
+        srrow = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
+        self.sr_toggle = Button(text="S/R LEVELS: ON", background_normal="", background_color=(.04,.48,.42,1), color=(1,1,1,1), font_size="12sp", bold=True)
+        self.sr_toggle.bind(on_release=lambda *_: self.toggle_sr())
+        srrow.add_widget(self.sr_toggle)
+        self.sr_timeframe = Label(text="S/R uses selected chart timeframe", color=(.55,.85,1,1), font_size="11sp")
+        srrow.add_widget(self.sr_timeframe)
+        body.add_widget(srrow)
+        self.sr_detail = self.info("SUPPORT: calculating...\\nRESISTANCE: calculating...")
+        self.sr_detail.height = dp(62)
+        body.add_widget(self.sr_detail)
         self.marker_legend = self.info("[color=20E070]▲ BUY[/color] below candle     [color=FF4D6D]▼ SELL[/color] above candle (80% confirmation)")
         self.marker_legend.height = dp(34)
         body.add_widget(self.marker_legend)
@@ -388,6 +452,12 @@ class CryptoBotApp(App):
         label.bind(width=lambda obj,w: setattr(obj,"text_size",(w,None)), texture_size=lambda obj,s: setattr(obj,"height",max(dp(42),s[1]+dp(10))))
         return label
 
+    def toggle_sr(self):
+        self.chart.sr_enabled = not self.chart.sr_enabled
+        self.sr_toggle.text = "S/R LEVELS: {}".format("ON" if self.chart.sr_enabled else "OFF")
+        self.sr_toggle.background_color = (.04,.48,.42,1) if self.chart.sr_enabled else (.22,.25,.31,1)
+        self.chart.redraw()
+
     def set_interval(self, interval):
         self.interval = interval
         for iv, button in self.tf_buttons.items():
@@ -441,6 +511,12 @@ class CryptoBotApp(App):
         self.orderbook.text="[b][color=20E070]BID[/color][/b] {}\n[b][color=FF4D6D]ASK[/color][/b] {}".format(bid_text,ask_text)
         ind=result.get("indicators",{})
         self.chart.set_data(candles,ind)
+        self.sr_timeframe.text = "S/R timeframe: {}".format(interval.upper())
+        supports = self.chart.support_levels
+        resistances = self.chart.resistance_levels
+        support_text = " | ".join(format(x,".8g") for x in supports) if supports else "Not enough swing lows"
+        resistance_text = " | ".join(format(x,".8g") for x in resistances) if resistances else "Not enough swing highs"
+        self.sr_detail.text = "[b][color=45D9F5]SUPPORT ({})[/color][/b]: {}\\n[b][color=FFAD55]RESISTANCE ({})[/color][/b]: {}".format(interval.upper(),support_text,interval.upper(),resistance_text)
         decision=result.get("decision","WAIT")
         if decision=="WAIT" and ind and ind.get("price",0)<ind.get("ema20",0)<ind.get("ema50",0) and ind.get("rsi14",50)<45:
             decision="SELL / EXIT WARNING"
